@@ -30,42 +30,6 @@ TRAIN_DATASET_PATH = os.path.join('.', 'train_dataset.npz')
 INIT_MODEL_PATH = os.path.join('.', 'predictor_init.model')
 
 
-def make_ground_truth_tensor(truths):
-    each_tensors = [parse_ground_truth(t, ORIG_WIDTH, ORIG_HEIGHT) for t in truths]
-    return reduce(lambda x,y: x + y, each_tensors)
-
-def prepare_dataset(args):
-    print('prepare dataset: catalog:%s' % (args.catalog_file))
-    with open(os.path.join(args.catalog_file), 'r') as fp:
-        catalog = json.load(fp)
-    train_dataset = filter(lambda item: item['bounding_boxes'] != [], catalog['dataset'])
-    images = np.asarray([load_image(item['color_image_path'], INPUT_SIZE, INPUT_SIZE) for item in train_dataset])
-    ground_truths = np.asarray([make_ground_truth_tensor(item['bounding_boxes']) for item in train_dataset]).astype(np.float32)
-    np.savez(TRAIN_DATASET_PATH, images=images, ground_truths=ground_truths)
-    print('save train dataset: images={}, ground_truths={}'.format(images.shape, ground_truths.shape))
-
-def copy_conv_layer(src, dst):
-    for i in range(1, N_CNN_LAYER+1):
-        src_layer = eval('src.conv%d' % i)
-        dst_layer = eval('dst.conv%d' % i)
-        dst_layer.W = src_layer.W
-        dst_layer.b = src_layer.b
-
-def initialize_model(args):
-    print('initialize model: input:%s output:%s' % \
-        (args.input_model_file, args.output_model_file))
-    cnn_model = YoloTinyCNN()
-    chainer.serializers.load_npz(args.input_model_file, cnn_model)
-
-    predictor_model = YoloTiny()
-    # serializers.save_npz()実行時の
-    # "ValueError: uninitialized parameters cannot be serialized" を回避するために
-    # ダミーデータでの順伝播を実行する
-    dummy_image = Variable(np.zeros((1, 3, INPUT_SIZE, INPUT_SIZE)).astype(np.float32))
-    predictor_model.forward(dummy_image)
-    copy_conv_layer(cnn_model, predictor_model)
-    chainer.serializers.save_npz(args.output_model_file, predictor_model)
-
 def parse_ground_truth(truth, orig_width, orig_height):
     def load_ground_truth(truth):
         # YOLOの入力画像の座標系に変化
@@ -97,6 +61,43 @@ def parse_ground_truth(truth, orig_width, orig_height):
     tensor[5:, active_grid_cell['y'], active_grid_cell['x']] \
         = one_hot_confidence_vector
     return tensor
+
+def make_ground_truth_tensor(truths):
+    each_tensors = [parse_ground_truth(t, ORIG_WIDTH, ORIG_HEIGHT) for t in truths]
+    return reduce(lambda x,y: x + y, each_tensors)
+
+def prepare_dataset(args):
+    print('prepare dataset: catalog:%s' % (args.catalog_file))
+    with open(os.path.join(args.catalog_file), 'r') as fp:
+        catalog = json.load(fp)
+    train_dataset = filter(lambda item: item['bounding_boxes'] != [], catalog['dataset'])
+    images = np.asarray([load_image(item['color_image_path'], INPUT_SIZE, INPUT_SIZE) for item in train_dataset])
+    ground_truths = np.asarray([make_ground_truth_tensor(item['bounding_boxes']) for item in train_dataset]).astype(np.float32)
+    np.savez(TRAIN_DATASET_PATH, images=images, ground_truths=ground_truths)
+    print('save train dataset: images={}, ground_truths={}'.format(images.shape, ground_truths.shape))
+
+def initialize_model(args):
+    def copy_conv_layer(src, dst):
+        for i in range(1, N_CNN_LAYER+1):
+            src_layer = eval('src.conv%d' % i)
+            dst_layer = eval('dst.conv%d' % i)
+            dst_layer.W = src_layer.W
+            dst_layer.b = src_layer.b
+
+    print('initialize model: input:%s output:%s' % \
+        (args.input_model_file, args.output_model_file))
+    cnn_model = YoloTinyCNN()
+    chainer.serializers.load_npz(args.input_model_file, cnn_model)
+
+    predictor_model = YoloTiny()
+    # serializers.save_npz()実行時の
+    # "ValueError: uninitialized parameters cannot be serialized" を回避するために
+    # ダミーデータでの順伝播を実行する
+    dummy_image = Variable(np.zeros((1, 3, INPUT_SIZE, INPUT_SIZE)).astype(np.float32))
+    predictor_model.forward(dummy_image)
+
+    copy_conv_layer(cnn_model, predictor_model)
+    chainer.serializers.save_npz(args.output_model_file, predictor_model)
 
 def one_epoch_train(model, optimizer, images, ground_truths, batch_size):
     n_train = len(ground_truths)
@@ -190,8 +191,7 @@ if __name__ == '__main__':
     args = parse_arguments()
 
     if args.gpu >= 0:
-        chainer.cuda.get_device(args.gpu).use()  # Make a specified GPU current
-        model.to_gpu()  # Copy the model to the GPU
+        chainer.cuda.get_device(args.gpu).use()
         xp = chainer.cuda.cupy
 
     if args.action == 'prepare':
@@ -200,5 +200,4 @@ if __name__ == '__main__':
         initialize_model(args)
     elif args.action == 'train':
         train_model(args)
-
     print('done')
