@@ -18,157 +18,110 @@ import chainer.functions as F
 import chainer.links as L
 from chainer import Variable, Function, Link
 
-
-# file paths
-TRAIN_DATASET_PATH = os.path.join('.', 'train_dataset.npz')
+sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'lib'))
+from yolo import *
+from image_process import *
 
 # configurations
-xp = np
-N_BOXES = 1
-N_CLASSES = 25  # 1..25
-N_GRID = 7
-INPUT_SIZE = 448
-
-class YoloTinyCNN(chainer.Chain):
-    def __init__(self):
-        super(YoloTinyCNN, self).__init__(
-            conv1  = L.Convolution2D(3,      16, ksize=3, stride=1, pad=1),
-            conv2  = L.Convolution2D(None,   32, ksize=3, stride=1, pad=1),
-            conv3  = L.Convolution2D(None,   64, ksize=3, stride=1, pad=1),
-            conv4  = L.Convolution2D(None,  128, ksize=3, stride=1, pad=1),
-            conv5  = L.Convolution2D(None,  256, ksize=3, stride=1, pad=1),
-            conv6  = L.Convolution2D(None,  512, ksize=3, stride=1, pad=1),
-            conv7  = L.Convolution2D(None, 1024, ksize=3, stride=1, pad=1),
-            # addditonal layers for pretraining
-            conv8  = L.Convolution2D(None, N_CLASSES, ksize=1, stride=1, pad=0),
-        )
-        self.train = True
-
-    def forward(self, x):
-        h = F.leaky_relu(self.conv1(x), slope=0.1)
-        h = F.max_pooling_2d(h, ksize=2, stride=2, pad=0) # 224x224
-        h = F.leaky_relu(self.conv2(h), slope=0.1)
-        h = F.max_pooling_2d(h, ksize=2, stride=2, pad=0) # 112x112
-        h = F.leaky_relu(self.conv3(h), slope=0.1)
-        h = F.max_pooling_2d(h, ksize=2, stride=2, pad=0) # 56x56
-        h = F.leaky_relu(self.conv4(h), slope=0.1)
-        h = F.max_pooling_2d(h, ksize=2, stride=2, pad=0) # 28x28
-        h = F.leaky_relu(self.conv5(h), slope=0.1)
-        h = F.max_pooling_2d(h, ksize=2, stride=2, pad=0) # 14x14
-        h = F.leaky_relu(self.conv6(h), slope=0.1)
-        h = F.max_pooling_2d(h, ksize=2, stride=2, pad=0) # 7x7
-        h = F.leaky_relu(self.conv7(h), slope=0.1)
-        # additional layers for pretraining
-        h = self.conv8(h)
-        h = F.average_pooling_2d(h, h.data.shape[-1], stride=1, pad=0)
-        return h
-
-    def __call__(self, x, t):
-        batch_size = x.data.shape[0]
-        h = self.forward(x)
-        h = F.reshape(h, (batch_size, -1))
-
-        # ラベルの識別子は0始まりにしないとエラーするため-1する
-        self.loss = F.softmax_cross_entropy(h, t-1)
-        self.accuracy = F.accuracy(h, t)
-        if self.train:
-            return self.loss
-        else:
-            return F.softmax(h)
+TRAIN_DATASET_PATH = os.path.join('.', 'train_dataset.npz')
 
 
-def load_image(path):
-    image = cv2.imread(path)
-    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-    return cv2.resize(image, (INPUT_SIZE, INPUT_SIZE))
-
-def prepare_dataset(catalog_path):
-    with open(os.path.join(catalog_path), 'r') as fp:
+def prepare_dataset(args):
+    print('prepare dataset: catalog:%s' % (args.catalog_file))
+    with open(os.path.join(args.catalog_file), 'r') as fp:
         catalog = json.load(fp)
     train_dataset = catalog['dataset']
-    inputs = np.array([load_image(item['color_image_path']) for item in train_dataset])
-    labels = np.array([item['classes'] for item in train_dataset])
-    np.savez(TRAIN_DATASET_PATH, inputs=inputs, labels=labels)
+    images = np.asarray([load_image(item['color_image_path'], INPUT_SIZE, INPUT_SIZE) for item in train_dataset])
+    labels = np.asarray([item['classes'] for item in train_dataset]).astype(np.int32)
+    np.savez(TRAIN_DATASET_PATH, images=images, labels=labels)
 
-
-def one_epoch_train(model, optimizer, batch_size, inputs, labels):
+def one_epoch_train(model, optimizer, images, labels, batch_size):
     n_train = len(labels)
     perm = np.random.permutation(n_train)
 
     sum_loss, sum_acc = (0., 0.)
     for count in six.moves.range(0, n_train, batch_size):
         ix = perm[count:count+batch_size]
-        xs = chainer.Variable(xp.asarray(inputs[ix]).astype(np.float32).transpose(0,3,1,2))
+        xs = chainer.Variable(xp.asarray(images[ix]).astype(np.float32).transpose(0,3,1,2))
         ts = chainer.Variable(xp.asarray(labels[ix].ravel()).astype(np.int32))
 
         model.train = True
         optimizer.update(model, xs, ts)
-        print('mini-batch:{} loss:{} acc:{}'.format((count/batch_size)+1, model.loss.data, model.accuracy.data))
-        sum_loss += model.loss.data/len(ix)
-        sum_acc += model.accuracy.data/len(ix)
-
+        print('mini-batch:%d loss:%f acc:%f' % ((count/batch_size)+1, model.loss.data, model.accuracy.data))
+        sum_loss += model.loss.data * len(ix) / n_train
+        sum_acc += model.accuracy.data * len(ix) / n_train
     return sum_loss, sum_acc
 
-def one_epoch_cv(model, optimizer, inputs, labels):
-    xs = chainer.Variable(xp.asarray(inputs).astype(np.float32).transpose(0,3,1,2))
+def one_epoch_cv(model, optimizer, images, labels):
+    xs = chainer.Variable(xp.asarray(images).astype(np.float32).transpose(0,3,1,2))
     ts = chainer.Variable(xp.asarray(labels.ravel()).astype(np.int32))
 
     model.train = False
     model(xs, ts)
     return model.loss.data, model.accuracy.data
 
-def train_cnn(n_epoch, batch_size):
+def train_model(args):
+    print('train model: gpu:%d epoch:%d batch_size:%d init_model:%s init_state:%s' % \
+        (args.gpu, args.n_epoch, args.batch_size, args.init_model_file, args.init_state_file))
     model = YoloTinyCNN()
+    if args.gpu >= 0: model.to_gpu()
     optimizer = chainer.optimizers.Adam()
     optimizer.setup(model)
 
+    if len(args.init_model_file) > 0:
+        chainer.serializers.load_npz(args.init_model_file, model)
+    if len(args.init_state_file) > 0:
+        chainer.serializers.load_npz(args.init_state_file, optimizer)
+
     logs = []
     train_dataset = np.load(TRAIN_DATASET_PATH)
-    inputs = train_dataset['inputs']
+    images = train_dataset['images']
     labels = train_dataset['labels']
 
     train_ixs = sorted(random.sample(range(labels.shape[0]), int(labels.shape[0] * 0.8)))
     cv_ixs = sorted(list(set(range(labels.shape[0])) - set(train_ixs)))
-    print('number of dataset: train:{} cv:{}'.format(len(train_ixs), len(cv_ixs)))
+    print('number of dataset: train:%d cv:%d' % (len(train_ixs), len(cv_ixs)))
 
-    for epoch in six.moves.range(1, n_epoch+1):
-        train_loss, train_acc = one_epoch_train(model, optimizer, batch_size, inputs[train_ixs], labels[train_ixs])
-        cv_loss, cv_acc = one_epoch_cv(model, optimizer, inputs[cv_ixs], labels[cv_ixs])
-        print('epoch:{} trian loss:{} train acc:{} cv loss:{} cv acc:{}'.format(epoch, train_loss, train_acc, cv_loss, cv_acc))
+    for epoch in range(1, args.n_epoch+1):
+        train_loss, train_acc = one_epoch_train(model, optimizer, images[train_ixs], labels[train_ixs], args.batch_size)
+        cv_loss, cv_acc = one_epoch_cv(model, optimizer, images[cv_ixs], labels[cv_ixs])
+        print('epoch:%d trian loss:%f train acc:%f cv loss:%f cv acc:%f' % (epoch, train_loss, train_acc, cv_loss, cv_acc))
         logs.append({'epoch': str(epoch),
             'train_loss': str(train_loss), 'train_acc': str(train_acc),
             'cv_loss': str(cv_loss), 'cv_acc': str(cv_acc)})
         if (epoch % 10) == 0:
-            chainer.serializers.save_npz('yolo-tiny-cnn_model_epoch{}.model'.format(epoch), model)
-            chainer.serializers.save_npz('yolo-tiny-cnn_model_epoch{}.state'.format(epoch), optimizer)
+            chainer.serializers.save_npz('cnn_epoch{}.model'.format(epoch), model)
+            chainer.serializers.save_npz('cnn_epoch{}.state'.format(epoch), optimizer)
 
-    with open('yolo-tiny-cnn_train_log.json', 'w') as fp:
-        json.dump({'epoch': str(n_epoch), 'batch_size': str(batch_size), 'logs': logs},
+    chainer.serializers.save_npz('cnn_final.model', model)
+    chainer.serializers.save_npz('cnn_final.state', optimizer)
+    with open('cnn_train_log.json', 'w') as fp:
+        json.dump({'epoch': str(args.n_epoch), 'batch_size': str(args.batch_size), 'logs': logs},
             fp, sort_keys=True, ensure_ascii=False, indent=2)
 
 def parse_arguments():
     usage = 'make training dataset catalog (sample code)'
     parser = argparse.ArgumentParser(usage=usage)
     parser.add_argument('--action', '-a', type=str, dest='action', required=True)
+    # options for preparing dataset
     parser.add_argument('--catalog-file', type=str, dest='catalog_file')
-    parser.add_argument('--batchsize', '-b', type=int, dest='batch_size', default=50)
+    # options for training model
     parser.add_argument('--gpu', '-g', type=int, default=-1)
+    parser.add_argument('--batchsize', '-b', type=int, dest='batch_size', default=20)
     parser.add_argument('--epoch', '-e', type=int, dest='n_epoch', default=1)
+    parser.add_argument('--init-model-file', type=str, dest='init_model_file', default='')
+    parser.add_argument('--init-state-file', type=str, dest='init_state_file', default='')
     return parser.parse_args()
 
 if __name__ == '__main__':
     args = parse_arguments()
 
     if args.gpu >= 0:
-        chainer.cuda.get_device(args.gpu).use()  # Make a specified GPU current
-        model.to_gpu()  # Copy the model to the GPU
+        chainer.cuda.get_device(args.gpu).use()
         xp = chainer.cuda.cupy
 
     if args.action == 'prepare':
-        print('preparing: catalog={}'.format(args.catalog_file))
-        prepare_dataset(args.catalog_file)
+        prepare_dataset(args)
     elif args.action == 'train':
-        print('training: gpu={} epoch={} batchsize={}'.format(args.gpu, args.n_epoch, args.batch_size))
-        train_cnn(args.n_epoch, args.batch_size)
-
-    print('\ndone')
+        train_model(args)
+    print('done')
