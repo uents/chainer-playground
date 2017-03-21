@@ -9,7 +9,7 @@
       "minItems": 1,
       "items": {
         "type": "object",
-        "required": ["classes", "pattern_id", "color_image_path", "depth_image_path", "label_image_path", "bounding_boxes"],
+        "required": ["classes", "pattern_id", "color_image_path", "label_image_path", "bounding_boxes"],
         "additionalProperties": false,
         "properties": {
           "classes": {

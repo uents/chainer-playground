@@ -1,5 +1,12 @@
 # -*- coding: utf-8 -*-
 
+'''
+usage:
+  python make_train_catalog.py
+   --input-dir ../HDD2/contest/APC/Single
+   --output-file ../cache/train_catalog.json
+'''
+
 from __future__ import unicode_literals
 from __future__ import print_function
 import sys
@@ -95,15 +102,16 @@ def parse_arguments():
     usage = 'make training dataset catalog (sample code)'
     parser = argparse.ArgumentParser(usage=usage)
     parser.add_argument('--input-dir', type=str, dest='input_dir', required=True)
-    parser.add_argument('--output-dir', type=str, dest='output_dir', required=True)
+    parser.add_argument('--output-file', type=str, dest='output_file', required=True)
     return parser.parse_args()
 
 if __name__ == '__main__':
     args = parse_arguments()
-    catalog = make_catalog(args.input_dir, args.output_dir)
+    output_dir = os.path.split(args.output_file)[0]
+    catalog = make_catalog(args.input_dir, output_dir)
     
-    if not os.path.exists(args.output_dir):
-        os.makedirs(args.output_dir)
-    with open(os.path.join(args.output_dir, 'train_dataset_catalog_sample.json'), 'w') as fp:
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+    with open(args.output_file, 'w') as fp:
         json.dump(catalog, fp, sort_keys=True, ensure_ascii=False, indent=2)
     print('\nfinished')

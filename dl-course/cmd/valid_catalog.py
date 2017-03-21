@@ -1,5 +1,10 @@
 # -*- coding: utf-8 -*-
 
+'''
+usage:
+  python valid_catalog.py --catalog-fine ../cache/train_catalog.json
+'''
+
 from __future__ import unicode_literals
 from __future__ import print_function
 import sys
@@ -28,4 +33,5 @@ if __name__ == '__main__':
         catalog = json.load(fp)
     jsonschema.validate(catalog, catalog_schema)
 
-    print('\nfinished')
+    path = os.path.split(args.catalog_file)[1]
+    print('success:', path, 'is valid')
