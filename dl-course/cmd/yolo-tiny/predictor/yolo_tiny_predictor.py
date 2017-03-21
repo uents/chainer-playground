@@ -31,24 +31,25 @@ INIT_MODEL_PATH = os.path.join('.', 'predictor_init.model')
 
 
 def parse_ground_truth(truth, orig_width, orig_height):
+def parse_ground_truth(truth, orig_width, orig_height):
     def load_ground_truth(truth):
-        # YOLOの入力画像の座標系に変化
-        x = float(truth['x']) * INPUT_SIZE / orig_width
-        y = float(truth['y']) * INPUT_SIZE / orig_height
+        # YOLOの入力画像の座標系 (始点はオブジェクト中心) に変換
         w = float(truth['width']) * INPUT_SIZE / orig_width
         h = float(truth['height']) * INPUT_SIZE / orig_height
+        x = (float(truth['x']) * INPUT_SIZE / orig_width) + (w / 2)
+        y = (float(truth['y']) * INPUT_SIZE / orig_height) + (h / 2)
         conf = int(truth['class'])
         return x, y, w, h, conf
 
     tx, ty, tw, th, tconf = load_ground_truth(truth)
     grid_size = INPUT_SIZE / N_GRID
     active_grid_cell = {
-        'x': int(math.floor(tx / grid_size)),
-        'y': int(math.floor(ty / grid_size))
+        'x': int(math.modf(tx / grid_size)[1]),
+        'y': int(math.modf(ty / grid_size)[1])
     }
-    norm_truth = { # [0..1]の座標系に正規化
-        'x' : (tx - active_grid_cell['x']*grid_size)/grid_size,
-        'y' : (ty - active_grid_cell['y']*grid_size)/grid_size,
+    norm_truth = { # [0..1] に正規化
+        'x' : math.modf(tx / grid_size)[0],
+        'y' : math.modf(ty / grid_size)[0],
         'w' : tw / INPUT_SIZE,
         'h' : th / INPUT_SIZE
     }
