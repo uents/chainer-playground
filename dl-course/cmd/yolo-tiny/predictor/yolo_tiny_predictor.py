@@ -74,8 +74,8 @@ def prepare_dataset(args):
     train_dataset = filter(lambda item: item['bounding_boxes'] != [], catalog['dataset'])
     images = np.asarray([load_image(item['color_image_path'], INPUT_SIZE, INPUT_SIZE) for item in train_dataset])
     ground_truths = np.asarray([make_ground_truth_tensor(item['bounding_boxes']) for item in train_dataset]).astype(np.float32)
-    np.savez(TRAIN_DATASET_PATH, images=images, ground_truths=ground_truths)
     print('save train dataset: images={}, ground_truths={}'.format(images.shape, ground_truths.shape))
+    np.savez(TRAIN_DATASET_PATH, images=images, ground_truths=ground_truths)
 
 def initialize_model(args):
     def copy_conv_layer(src, dst):

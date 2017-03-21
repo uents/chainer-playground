@@ -33,6 +33,7 @@ def prepare_dataset(args):
     train_dataset = catalog['dataset']
     images = np.asarray([load_image(item['color_image_path'], INPUT_SIZE, INPUT_SIZE) for item in train_dataset])
     labels = np.asarray([item['classes'] for item in train_dataset]).astype(np.int32)
+    print('save train dataset: images={}, ground_truths={}'.format(images.shape, ground_truths.shape))
     np.savez(TRAIN_DATASET_PATH, images=images, labels=labels)
 
 def one_epoch_train(model, optimizer, images, labels, batch_size):

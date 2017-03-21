@@ -138,7 +138,7 @@ class YoloTiny(chainer.Chain):
         pprob.to_gpu()
         tprob[_tprob == 1.0] = 1.0
         # 学習係数を、オブジェクトが存在するグリッドか否かで調整
-        box_learning_scale = np.tile(0.0, tconf.shape)
+        box_learning_scale = np.tile(0.1, tconf.shape)
         box_learning_scale[tconf == 1.0] = 5.0
         conf_learning_scale = np.tile(0.5, tconf.shape)
         conf_learning_scale[tconf == 1.0] = 1.0
@@ -164,8 +164,8 @@ class YoloTiny(chainer.Chain):
         w_loss = F.sum(box_learning_scale * ((tw - pw) ** 2))
         h_loss = F.sum(box_learning_scale * ((th - ph) ** 2))
         conf_loss = F.sum(conf_learning_scale * ((tconf - pconf) ** 2))
-#        prob_loss = F.sum(prob_learning_scale * F.reshape(F.sum(((tprob - pprob) ** 2), axis=1), prob_learning_scale.shape))
-        prob_loss = F.sum((tprob - pprob) ** 2)
+        prob_loss = F.sum(prob_learning_scale * F.reshape(F.sum(((tprob - pprob) ** 2), axis=1), prob_learning_scale.shape))
+#        prob_loss = F.sum((tprob - pprob) ** 2)
         self.loss = x_loss + y_loss + w_loss + h_loss + conf_loss + prob_loss
 
         if self.train:
