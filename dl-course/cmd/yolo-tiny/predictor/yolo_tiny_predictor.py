@@ -89,7 +89,6 @@ def initialize_model(args):
     cnn_model = YoloTinyCNN()
     chainer.serializers.load_npz(args.input_model_file, cnn_model)
     if args.gpu >= 0: cnn_model.to_gpu()
-
     predictor_model = YoloTiny()
     if args.gpu >= 0: predictor_model.to_gpu()
 
@@ -98,11 +97,19 @@ def initialize_model(args):
     # ダミーデータでの順伝播を実行する
     dummy_image = Variable(np.zeros((1, 3, INPUT_SIZE, INPUT_SIZE)).astype(np.float32))
     predictor_model.forward(dummy_image)
-
     copy_conv_layer(cnn_model, predictor_model)
     chainer.serializers.save_npz(args.output_model_file, predictor_model)
 
-def one_epoch_train(model, optimizer, images, ground_truths, batch_size):
+
+momentum = 0.9
+learning_schedules = { 
+    '0'    : 1e-5,
+    '500'  : 1e-4,
+    '10000': 1e-5,
+    '20000': 1e-6 
+}
+
+def one_epoch_train(model, optimizer, images, ground_truths, batch_size, epoch):
     n_train = len(ground_truths)
     perm = np.random.permutation(n_train)
 
@@ -113,6 +120,9 @@ def one_epoch_train(model, optimizer, images, ground_truths, batch_size):
         ts = chainer.Variable(xp.asarray(ground_truths[ix]).astype(np.float32))
 
         model.train = True
+        batch_count = (epoch - 1) * batch_size + count
+        if str(batch_count) in learning_schedules:
+            optimizer.lr = learning_schedules[str(batch_count)]
         optimizer.update(model, xs, ts)
 #        print('mini-batch:%d loss:%f' % ((count/batch_size)+1, model.loss.data))
 #        print('mini-batch:%d loss:%f acc:%f' % ((count/batch_size)+1, model.loss.data, model.accuracy.data))
@@ -144,9 +154,11 @@ def train_model(args):
         chainer.serializers.load_npz(args.init_model_file, model)
     if args.gpu >= 0: model.to_gpu()
 
-    optimizer = chainer.optimizers.MomentumSGD(lr=0.9)
+    optimizer = chainer.optimizers.MomentumSGD(
+        lr=learning_schedules['0'], momentum=momentum)
+    optimizer.use_cleargrads()
     optimizer.setup(model)
-    optimizer.add_hook(chainer.optimizer.WeightDecay(0.0005))
+#    optimizer.add_hook(chainer.optimizer.WeightDecay(0.0005))
     if len(args.init_state_file) > 0:
         chainer.serializers.load_npz(args.init_state_file, optimizer)
 
@@ -161,7 +173,7 @@ def train_model(args):
 
     for epoch in six.moves.range(1, args.n_epoch+1):
         train_loss, train_acc = one_epoch_train(model, optimizer,
-            images[train_ixs], ground_truths[train_ixs], args.batch_size)
+            images[train_ixs], ground_truths[train_ixs], args.batch_size, epoch)
         cv_loss, cv_acc = one_epoch_cv(model, optimizer,
             images[cv_ixs], ground_truths[cv_ixs])
         print('epoch:%d trian loss:%f train acc:%f cv loss:%f cv acc:%f' %

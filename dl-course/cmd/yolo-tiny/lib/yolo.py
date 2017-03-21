@@ -170,8 +170,7 @@ class YoloTiny(chainer.Chain):
 
         if self.train:
             print("loss x:%f y:%f w:%f h:%f conf:%f prob:%f" %
-                (F.sum(x_loss).data, F.sum(y_loss).data, F.sum(w_loss).data, F.sum(h_loss).data, \
-                F.sum(conf_loss).data, F.sum(prob_loss).data))
+                (x_loss.data, y_loss.data, w_loss.data, h_loss.data, conf_loss.data, prob_loss.data))
             return self.loss
         else:
             # TODO: 推論結果を返す
