@@ -31,7 +31,6 @@ INIT_MODEL_PATH = os.path.join('.', 'predictor_init.model')
 
 
 def parse_ground_truth(truth, orig_width, orig_height):
-def parse_ground_truth(truth, orig_width, orig_height):
     def load_ground_truth(truth):
         # YOLOの入力画像の座標系 (始点はオブジェクト中心) に変換
         w = float(truth['width']) * INPUT_SIZE / orig_width
