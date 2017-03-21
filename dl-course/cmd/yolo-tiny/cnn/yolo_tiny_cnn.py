@@ -53,23 +53,31 @@ def one_epoch_train(model, optimizer, images, labels, batch_size):
     return sum_loss, sum_acc
 
 def one_epoch_cv(model, optimizer, images, labels):
-    xs = chainer.Variable(xp.asarray(images).astype(np.float32).transpose(0,3,1,2))
-    ts = chainer.Variable(xp.asarray(labels.ravel()).astype(np.int32))
+    n_valid = len(labels)
 
-    model.train = False
-    model(xs, ts)
-    return model.loss.data, model.accuracy.data
+    sum_loss, sum_acc = (0., 0.)
+    for count in six.moves.range(0, n_valid, 10):
+        ix = np.arange(count, count+10)
+        xs = chainer.Variable(xp.asarray(images[ix]).astype(np.float32).transpose(0,3,1,2))
+        ts = chainer.Variable(xp.asarray(labels[ix].ravel()).astype(np.int32))
+
+        model.train = False
+        model(xs, ts)
+        sum_loss += model.loss.data * len(ix) / n_valid
+        sum_acc += model.accuracy.data * len(ix) / n_valid
+    return sum_loss, sum_acc
 
 def train_model(args):
     print('train model: gpu:%d epoch:%d batch_size:%d init_model:%s init_state:%s' % \
         (args.gpu, args.n_epoch, args.batch_size, args.init_model_file, args.init_state_file))
-    model = YoloTinyCNN()
-    if args.gpu >= 0: model.to_gpu()
-    optimizer = chainer.optimizers.Adam()
-    optimizer.setup(model)
 
+    model = YoloTinyCNN()
     if len(args.init_model_file) > 0:
         chainer.serializers.load_npz(args.init_model_file, model)
+    if args.gpu >= 0: model.to_gpu()
+
+    optimizer = chainer.optimizers.Adam()
+    optimizer.setup(model)
     if len(args.init_state_file) > 0:
         chainer.serializers.load_npz(args.init_state_file, optimizer)
 
@@ -85,6 +93,7 @@ def train_model(args):
     for epoch in range(1, args.n_epoch+1):
         train_loss, train_acc = one_epoch_train(model, optimizer, images[train_ixs], labels[train_ixs], args.batch_size)
         cv_loss, cv_acc = one_epoch_cv(model, optimizer, images[cv_ixs], labels[cv_ixs])
+#        cv_loss, cv_acc = (0., 0.)
         print('epoch:%d trian loss:%f train acc:%f cv loss:%f cv acc:%f' % (epoch, train_loss, train_acc, cv_loss, cv_acc))
         logs.append({'epoch': str(epoch),
             'train_loss': str(train_loss), 'train_acc': str(train_acc),

@@ -52,7 +52,7 @@ def parse_ground_truth(truth, orig_width, orig_height):
         'w' : tw / INPUT_SIZE,
         'h' : th / INPUT_SIZE
     }
-    one_hot_confidence_vector = np.eye(N_CLASSES)[np.array(tconf)-1]
+    one_hot_confidence_vector = np.eye(N_CLASSES)[np.array(tconf)]
 
     # detection layerのテンソルに変換
     tensor = np.zeros(((5*N_BOXES)+N_CLASSES, N_GRID, N_GRID)).astype(np.float32)
@@ -88,8 +88,11 @@ def initialize_model(args):
         (args.input_model_file, args.output_model_file))
     cnn_model = YoloTinyCNN()
     chainer.serializers.load_npz(args.input_model_file, cnn_model)
+    if args.gpu >= 0: cnn_model.to_gpu()
 
     predictor_model = YoloTiny()
+    if args.gpu >= 0: predictor_model.to_gpu()
+
     # serializers.save_npz()実行時の
     # "ValueError: uninitialized parameters cannot be serialized" を回避するために
     # ダミーデータでの順伝播を実行する
@@ -111,32 +114,39 @@ def one_epoch_train(model, optimizer, images, ground_truths, batch_size):
 
         model.train = True
         optimizer.update(model, xs, ts)
-        print('mini-batch:%d loss:%f' % ((count/batch_size)+1, model.loss.data))
-        #print('mini-batch:%d loss:%f acc:%f' % ((count/batch_size)+1, model.loss.data, model.accuracy.data))
+#        print('mini-batch:%d loss:%f' % ((count/batch_size)+1, model.loss.data))
+#        print('mini-batch:%d loss:%f acc:%f' % ((count/batch_size)+1, model.loss.data, model.accuracy.data))
         sum_loss += model.loss.data * len(ix) / n_train
         #sum_acc += model.accuracy.data * len(ix) / n_train
     return sum_loss, sum_acc
 
 def one_epoch_cv(model, optimizer, images, ground_truths):
-    xs = chainer.Variable(xp.asarray(images).astype(np.float32).transpose(0,3,1,2))
-    ts = chainer.Variable(xp.asarray(ground_truths).astype(np.int32))
+    n_valid = len(ground_truths)
 
-    model.train = False
-    model(xs, ts)
-    #return model.loss.data, model.accuracy.data
-    return model.loss.data, 0.0
+    sum_loss, sum_acc = (0., 0.)
+    for count in six.moves.range(0, n_valid, 10):
+        ix = np.arange(count, count+10)
+        xs = chainer.Variable(xp.asarray(images[ix]).astype(np.float32).transpose(0,3,1,2))
+        ts = chainer.Variable(xp.asarray(ground_truths[ix]).astype(np.int32))
+
+        model.train = False
+        model(xs, ts)
+        sum_loss += model.loss.data * len(ix) / n_valid
+#        sum_acc += model.accuracy.data * len(ix) / n_valid
+    return sum_loss, sum_acc
 
 def train_model(args):
     print('train model: gpu:%d epoch:%d batch_size:%d init_model:%s init_state:%s' % \
         (args.gpu, args.n_epoch, args.batch_size, args.init_model_file, args.init_state_file))
 
     model = YoloTiny()
-    if args.gpu >= 0: model.to_gpu()
-    optimizer = chainer.optimizers.Adam()
-    optimizer.setup(model)
-
     if len(args.init_model_file) > 0:
         chainer.serializers.load_npz(args.init_model_file, model)
+    if args.gpu >= 0: model.to_gpu()
+
+    optimizer = chainer.optimizers.MomentumSGD(lr=0.9)
+    optimizer.setup(model)
+    optimizer.add_hook(chainer.optimizer.WeightDecay(0.0005))
     if len(args.init_state_file) > 0:
         chainer.serializers.load_npz(args.init_state_file, optimizer)
 

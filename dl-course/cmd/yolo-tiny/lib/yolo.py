@@ -15,7 +15,9 @@ from chainer import Variable, Function, Link
 # configurations
 xp = np
 N_BOXES = 1
-N_CLASSES = 25  # 1..25
+N_CLASSES = 26  # 0..25
+                # F.softmax_cross_entropy()で扱うラベルが
+                # 0始まりの必要があるため、便宜的に0を追加
 N_GRID = 7
 INPUT_SIZE = 448
 N_CNN_LAYER = 7
@@ -65,8 +67,7 @@ class YoloTinyCNN(chainer.Chain):
 
     def __call__(self, x, t):
         h = self.forward(x)
-        # ラベルの識別子は0始まりにしないとエラーするため-1する
-        self.loss = F.softmax_cross_entropy(h, t-1)
+        self.loss = F.softmax_cross_entropy(h, t)
         self.accuracy = F.accuracy(h, t)
         if self.train:
             return self.loss
@@ -110,8 +111,8 @@ class YoloTiny(chainer.Chain):
         h = F.leaky_relu(self.conv9(h), slope=0.1)
         h = F.leaky_relu(self.fc1(h), slope=0.1)
         h = F.leaky_relu(self.fc2(h), slope=0.1)
-        # skip dropout
-        h = self.fc3(h) # (batch_size, 1470)
+        h = F.dropout(h, train=self.train, ratio=0.5)
+        h = self.fc3(h) # (batch_size, ((5*N_BOXES)+N_CLASSES)*N_GRID*N_GRID)
 
         # extract result tensors
         h = F.reshape(h, (batch_size, (5*N_BOXES)+N_CLASSES, N_GRID, N_GRID))
@@ -123,16 +124,26 @@ class YoloTiny(chainer.Chain):
         # 推論を実行
         px, py, pw, ph, pconf, pprob = self.forward(x)
         # 教師データを抽出
-        tx, ty, tw, th, tconf, tprob = np.array_split(t.data, indices_or_sections=(1,2,3,4,5), axis=1)
+        t.to_cpu()
+        tx, ty, tw, th, tconf, _tprob = np.array_split(t.data, indices_or_sections=(1,2,3,4,5), axis=1)
+#        tx, ty, tw, th, tconf, tprob = F.split_axis(t, indices_or_sections=(1,2,3,4,5), axis=1)
+        t.to_gpu()
+
         # オブジェクトが存在しないグリッドは、活性化後にグリッド中心となるよう学習
-        tx[tconf == 0.0] = 0.5
-        ty[tconf == 0.0] = 0.5
-        # bounding boxの学習係数を、オブジェクトが存在するグリッドか否かで調整
-        box_learning_scale = np.tile(0.1, tconf.shape)
-        box_learning_scale[tconf == 1.0] = 1.0
-        # confidencedの学習係数を、オブジェクトが存在するグリッドか否かで調整
-        conf_learning_scale = np.tile(0.1, tconf.shape)
-        conf_learning_scale[tconf == 1.0] = 10.0
+        tx[tconf != 1.0] = 0.5
+        ty[tconf != 1.0] = 0.5
+        # オブジェクトが存在しないグリッドは、学習させない
+        pprob.to_cpu()
+        tprob = pprob.data.copy()
+        pprob.to_gpu()
+        tprob[_tprob == 1.0] = 1.0
+        # 学習係数を、オブジェクトが存在するグリッドか否かで調整
+        box_learning_scale = np.tile(0.0, tconf.shape)
+        box_learning_scale[tconf == 1.0] = 5.0
+        conf_learning_scale = np.tile(0.5, tconf.shape)
+        conf_learning_scale[tconf == 1.0] = 1.0
+        prob_learning_scale = np.tile(0.0, tconf.shape)
+        prob_learning_scale[tconf == 1.0] = 1.0
 
         # 損失誤差を算出
         tx = self.__variable(tx, np.float32)
@@ -141,15 +152,20 @@ class YoloTiny(chainer.Chain):
         th = self.__variable(th, np.float32)
         tconf = self.__variable(tconf, np.float32)
         tprob = self.__variable(tprob, np.float32)
+        tx.to_gpu(), ty.to_gpu(), tw.to_gpu(), th.to_gpu(), tconf.to_gpu(), tprob.to_gpu()
         box_learning_scale = self.__variable(box_learning_scale, np.float32)
         conf_learning_scale = self.__variable(conf_learning_scale, np.float32)
+        prob_learning_scale = self.__variable(prob_learning_scale, np.float32)
+        box_learning_scale.to_gpu(), conf_learning_scale.to_gpu(), prob_learning_scale.to_gpu()
 
-        x_loss = F.sum(box_learning_scale * ((tx - px) ** 2)) / 2
-        y_loss = F.sum(box_learning_scale * ((ty - py) ** 2)) / 2
-        w_loss = F.sum(box_learning_scale * ((tw - pw) ** 2)) / 2
-        h_loss = F.sum(box_learning_scale * ((th - ph) ** 2)) / 2
-        conf_loss = F.sum(conf_learning_scale * ((tconf - pconf) ** 2)) / 2
-        prob_loss = F.sum(box_learning_scale * F.reshape(F.sum(((tprob - pprob) ** 2), axis=1), box_learning_scale.shape)) / 2
+#        print(type(tx), tx.shape, type(px), px.shape)
+        x_loss = F.sum(box_learning_scale * ((tx - px) ** 2))
+        y_loss = F.sum(box_learning_scale * ((ty - py) ** 2))
+        w_loss = F.sum(box_learning_scale * ((tw - pw) ** 2))
+        h_loss = F.sum(box_learning_scale * ((th - ph) ** 2))
+        conf_loss = F.sum(conf_learning_scale * ((tconf - pconf) ** 2))
+#        prob_loss = F.sum(prob_learning_scale * F.reshape(F.sum(((tprob - pprob) ** 2), axis=1), prob_learning_scale.shape))
+        prob_loss = F.sum((tprob - pprob) ** 2)
         self.loss = x_loss + y_loss + w_loss + h_loss + conf_loss + prob_loss
 
         if self.train:
@@ -158,7 +174,7 @@ class YoloTiny(chainer.Chain):
                 F.sum(conf_loss).data, F.sum(prob_loss).data))
             return self.loss
         else:
-            # TODO: 推論の実行
+            # TODO: 推論結果を返す
             return None
 
     def __variable(self, v, t):
