@@ -13,5 +13,6 @@ import cv2
 
 def load_image(path, width, height):
     image = cv2.imread(path)
+    orig_height, orig_width, _ = image.shape
     image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-    return cv2.resize(image, (width, height))
+    return cv2.resize(image, (width, height)), orig_width, orig_height

@@ -23,18 +23,31 @@ from yolo import *
 from image_process import *
 
 # configurations
-TRAIN_DATASET_PATH = os.path.join('.', 'train_dataset.npz')
+DATASET_PATH = os.path.join('.', 'cnn_dataset.npz')
 
+
+def parse_item_of_dataset(item):
+    image = load_image(item['color_image_path'], INPUT_SIZE, INPUT_SIZE)[0]
+    label = item['classes']
+    return {'image': image, 'label': label}
+
+def load_dataset(catalog_file):
+    with open(os.path.join(catalog_file), 'r') as fp:
+        catalog = json.load(fp)
+    items = [parse_item_of_dataset(item) for item in catalog['dataset']]
+    images = np.asarray([item['image'] for item in items])
+    labels = np.asarray([item['label'] for imte in items]).astype(np.int32)
+    return images, labels
 
 def prepare_dataset(args):
-    print('prepare dataset: catalog:%s' % (args.catalog_file))
-    with open(os.path.join(args.catalog_file), 'r') as fp:
-        catalog = json.load(fp)
-    train_dataset = catalog['dataset']
-    images = np.asarray([load_image(item['color_image_path'], INPUT_SIZE, INPUT_SIZE) for item in train_dataset])
-    labels = np.asarray([item['classes'] for item in train_dataset]).astype(np.int32)
-    print('save train dataset: images={}, labels={}'.format(images.shape, labels.shape))
-    np.savez(TRAIN_DATASET_PATH, images=images, labels=labels)
+    print('prepare dataset: train:%s cv:%s' %
+        (args.train_catalog_file, args.cv_catalog_file))
+    train_images, train_labels = load_dataset(args.train_catalog_file)
+    cv_images, cv_labels = load_dataset(args.cv_catalog_file)
+    print('save dataset: train images={} labels={}, cv images={} labels={}'
+        .format(train_images.shape, train_labels.shape, cv_images.shape, cv_labels.shape))
+    np.savez(DATASET_PATH, train_images=train_images, train_labels=train_labels,
+        cv_images=cv_images, cv_labels=cv_labels)
 
 def one_epoch_train(model, optimizer, images, labels, batch_size):
     n_train = len(labels)
@@ -83,22 +96,25 @@ def train_model(args):
         chainer.serializers.load_npz(args.init_state_file, optimizer)
 
     logs = []
-    train_dataset = np.load(TRAIN_DATASET_PATH)
-    images = train_dataset['images']
-    labels = train_dataset['labels']
-
-    train_ixs = sorted(random.sample(range(labels.shape[0]), int(labels.shape[0] * 0.8)))
-    cv_ixs = sorted(list(set(range(labels.shape[0])) - set(train_ixs)))
-    print('number of dataset: train:%d cv:%d' % (len(train_ixs), len(cv_ixs)))
+    dataset = np.load(DATASET_PATH)
+    train_images = dataset['train_images']
+    train_labels = dataset['train_labels']
+    cv_images = dataset['cv_images']
+    cv_labels = dataset['cv_labels']
+    print('number of dataset: train:%d cv:%d' % (len(train_labels), len(cv_labels)))
 
     for epoch in range(1, args.n_epoch+1):
-        train_loss, train_acc = one_epoch_train(model, optimizer, images[train_ixs], labels[train_ixs], args.batch_size)
-        cv_loss, cv_acc = one_epoch_cv(model, optimizer, images[cv_ixs], labels[cv_ixs])
-#        cv_loss, cv_acc = (0., 0.)
-        print('epoch:%d trian loss:%f train acc:%f cv loss:%f cv acc:%f' % (epoch, train_loss, train_acc, cv_loss, cv_acc))
-        logs.append({'epoch': str(epoch),
+        train_loss, train_acc = one_epoch_train(
+            model, optimizer, train_images, train_labels, args.batch_size)
+        cv_loss, cv_acc = one_epoch_cv(
+            model, optimizer, cv_images, cv_labels)
+        print('epoch:%d trian loss:%f train acc:%f cv loss:%f cv acc:%f' %
+            (epoch, train_loss, train_acc, cv_loss, cv_acc))
+        logs.append({
+            'epoch': str(epoch),
             'train_loss': str(train_loss), 'train_acc': str(train_acc),
-            'cv_loss': str(cv_loss), 'cv_acc': str(cv_acc)})
+            'cv_loss': str(cv_loss), 'cv_acc': str(cv_acc)
+        })
         if (epoch % 10) == 0:
             chainer.serializers.save_npz('cnn_epoch{}.model'.format(epoch), model)
             chainer.serializers.save_npz('cnn_epoch{}.state'.format(epoch), optimizer)
@@ -113,9 +129,10 @@ def parse_arguments():
     usage = 'make training dataset catalog (sample code)'
     parser = argparse.ArgumentParser(usage=usage)
     parser.add_argument('--action', '-a', type=str, dest='action', required=True)
-    # options for preparing dataset
-    parser.add_argument('--catalog-file', type=str, dest='catalog_file')
-    # options for training model
+    # prepare options
+    parser.add_argument('--train-catalog-file', type=str, dest='train_catalog_file', default='')
+    parser.add_argument('--cv-catalog-file', type=str, dest='cv_catalog_file', default='')
+    # train options
     parser.add_argument('--gpu', '-g', type=int, default=-1)
     parser.add_argument('--batchsize', '-b', type=int, dest='batch_size', default=20)
     parser.add_argument('--epoch', '-e', type=int, dest='n_epoch', default=1)

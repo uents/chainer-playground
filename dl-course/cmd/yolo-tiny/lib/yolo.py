@@ -29,7 +29,7 @@ https://github.com/pjreddie/darknet/blob/8f1b4e0962857d402f9d017fcbf387ef0eceb7c
 '''
 
 class YoloTinyCNN(chainer.Chain):
-    def __init__(self):
+    def __init__(self, gpu=-1):
         super(YoloTinyCNN, self).__init__(
             conv1  = L.Convolution2D(3,      16, ksize=3, stride=1, pad=1),
             conv2  = L.Convolution2D(None,   32, ksize=3, stride=1, pad=1),
@@ -41,7 +41,9 @@ class YoloTinyCNN(chainer.Chain):
             # addditonal layers for pretraining
             conv8  = L.Convolution2D(None, N_CLASSES, ksize=1, stride=1, pad=0),
         )
-        self.train = True
+        self.train = False
+        self.gpu = gpu
+        if self.gpu >= 0: self.to_gpu()
 
     def forward(self, x):
         batch_size = x.data.shape[0]
@@ -75,7 +77,7 @@ class YoloTinyCNN(chainer.Chain):
             return F.softmax(h)
 
 class YoloTiny(chainer.Chain):
-    def __init__(self):
+    def __init__(self, gpu=-1):
         super(YoloTiny, self).__init__(
             conv1  = L.Convolution2D(3,      16, ksize=3, stride=1, pad=1),
             conv2  = L.Convolution2D(None,   32, ksize=3, stride=1, pad=1),
@@ -90,7 +92,9 @@ class YoloTiny(chainer.Chain):
             fc2 = L.Linear(None, 4096),
             fc3 = L.Linear(None, ((N_BOXES*5)+N_CLASSES) * (N_GRID**2))
         )
-        self.train = True
+        self.train = False
+        self.gpu = gpu
+        if self.gpu >= 0: self.to_gpu()
 
     def forward(self, x):
         batch_size = x.data.shape[0]
@@ -123,18 +127,18 @@ class YoloTiny(chainer.Chain):
         # 推論を実行
         px, py, pw, ph, pconf, pprob = self.forward(x)
         # 教師データを抽出
-        t.to_cpu()
+        if self.gpu >= 0: t.to_cpu()
         tx, ty, tw, th, tconf, _tprob = np.array_split(t.data, indices_or_sections=(1,2,3,4,5), axis=1)
 #        tx, ty, tw, th, tconf, tprob = F.split_axis(t, indices_or_sections=(1,2,3,4,5), axis=1)
-        t.to_gpu()
+        if self.gpu >= 0: t.to_gpu()
 
         # オブジェクトが存在しないグリッドは、活性化後にグリッド中心となるよう学習
         tx[tconf != 1.0] = 0.5
         ty[tconf != 1.0] = 0.5
         # オブジェクトが存在しないグリッドは、学習させない
-        pprob.to_cpu()
+        if self.gpu >= 0: pprob.to_cpu()
         tprob = pprob.data.copy()
-        pprob.to_gpu()
+        if self.gpu >= 0: pprob.to_gpu()
         tprob[_tprob == 1.0] = 1.0
         # 学習係数を、オブジェクトが存在するグリッドか否かで調整
         box_learning_scale = np.tile(0.1, tconf.shape)
@@ -151,11 +155,13 @@ class YoloTiny(chainer.Chain):
         th = self.__variable(th, np.float32)
         tconf = self.__variable(tconf, np.float32)
         tprob = self.__variable(tprob, np.float32)
-        tx.to_gpu(), ty.to_gpu(), tw.to_gpu(), th.to_gpu(), tconf.to_gpu(), tprob.to_gpu()
+        if self.gpu >=0:
+            tx.to_gpu(), ty.to_gpu(), tw.to_gpu(), th.to_gpu(), tconf.to_gpu(), tprob.to_gpu()
         box_learning_scale = self.__variable(box_learning_scale, np.float32)
         conf_learning_scale = self.__variable(conf_learning_scale, np.float32)
         prob_learning_scale = self.__variable(prob_learning_scale, np.float32)
-        box_learning_scale.to_gpu(), conf_learning_scale.to_gpu(), prob_learning_scale.to_gpu()
+        if self.gpu >=0:
+            box_learning_scale.to_gpu(), conf_learning_scale.to_gpu(), prob_learning_scale.to_gpu()
 
 #        print(type(tx), tx.shape, type(px), px.shape)
         x_loss = F.sum(box_learning_scale * ((tx - px) ** 2))
@@ -165,15 +171,14 @@ class YoloTiny(chainer.Chain):
         conf_loss = F.sum(conf_learning_scale * ((tconf - pconf) ** 2))
         prob_loss = F.sum(prob_learning_scale * F.reshape(F.sum(((tprob - pprob) ** 2), axis=1), prob_learning_scale.shape))
 #        prob_loss = F.sum((tprob - pprob) ** 2)
-        self.loss = x_loss + y_loss + w_loss + h_loss + conf_loss + prob_loss
+        print("loss x:%f y:%f w:%f h:%f conf:%f prob:%f" %
+            (x_loss.data, y_loss.data, w_loss.data, h_loss.data, conf_loss.data, prob_loss.data))
 
+        self.loss = x_loss + y_loss + w_loss + h_loss + conf_loss + prob_loss
         if self.train:
-            print("loss x:%f y:%f w:%f h:%f conf:%f prob:%f" %
-                (x_loss.data, y_loss.data, w_loss.data, h_loss.data, conf_loss.data, prob_loss.data))
             return self.loss
         else:
-            # TODO: 推論結果を返す
-            return None
+            return px, py, pw, ph, pconf, pprob
 
     def __variable(self, v, t):
         return chainer.Variable(xp.asarray(v).astype(t))

@@ -32,11 +32,8 @@ learning_schedules = {
 momentum = 0.9
 weight_decay = 0.005
 
-ORIG_WIDTH = 1280
-ORIG_HEIGHT = 960
-
-TRAIN_DATASET_PATH = os.path.join('.', 'train_dataset.npz')
-INIT_MODEL_PATH = os.path.join('.', 'predictor_init.model')
+DATASET_PATH = os.path.join('.', 'predictor_dataset.npz')
+FIRST_MODEL_PATH = os.path.join('.', 'predictor_first.model')
 
 
 def parse_ground_truth(truth, orig_width, orig_height):
@@ -71,19 +68,33 @@ def parse_ground_truth(truth, orig_width, orig_height):
         = one_hot_confidence_vector
     return tensor
 
-def make_ground_truth_tensor(truths):
-    each_tensors = [parse_ground_truth(t, ORIG_WIDTH, ORIG_HEIGHT) for t in truths]
+def make_ground_truth_tensor(truths, orig_width, orig_height):
+    each_tensors = [parse_ground_truth(t, orig_width, orig_height) for t in truths]
     return reduce(lambda x,y: x + y, each_tensors)
 
-def prepare_dataset(args):
-    print('prepare dataset: catalog:%s' % (args.catalog_file))
-    with open(os.path.join(args.catalog_file), 'r') as fp:
+def parse_item_of_dataset(item):
+    image, orig_width, orig_height = load_image(item['color_image_path'], INPUT_SIZE, INPUT_SIZE)
+    ground_truth = make_ground_truth_tensor(item['bounding_boxes'], orig_width, orig_height)
+    return {'image': image, 'ground_truth': ground_truth}
+
+def load_dataset(catalog_file):
+    with open(os.path.join(catalog_file), 'r') as fp:
         catalog = json.load(fp)
-    train_dataset = filter(lambda item: item['bounding_boxes'] != [], catalog['dataset'])
-    images = np.asarray([load_image(item['color_image_path'], INPUT_SIZE, INPUT_SIZE) for item in train_dataset])
-    ground_truths = np.asarray([make_ground_truth_tensor(item['bounding_boxes']) for item in train_dataset]).astype(np.float32)
-    print('save train dataset: images={}, ground_truths={}'.format(images.shape, ground_truths.shape))
-    np.savez(TRAIN_DATASET_PATH, images=images, ground_truths=ground_truths)
+    dataset = filter(lambda item: item['bounding_boxes'] != [], catalog['dataset'])
+    items = [parse_item_of_dataset(item) for item in dataset]
+    images = np.asarray([item['image'] for item in items])
+    ground_truths = np.asarray([item['ground_truth'] for item in items])
+    return images, ground_truths
+
+def prepare_dataset(args):
+    print('prepare dataset: train:%s cv:%s' %
+        (args.train_catalog_file, args.cv_catalog_file))
+    train_images, train_truths = load_dataset(args.train_catalog_file)
+    cv_images, cv_truths = load_dataset(args.cv_catalog_file)
+    print('save dataset: train images={} ground_truths={}, cv images={} ground_truths={}'
+        .format(train_images.shape, train_truths.shape, cv_images.shape, cv_truths.shape))
+    np.savez(DATASET_PATH, train_images=train_images, train_ground_truths=train_truths,
+        cv_images=cv_images, cv_ground_truths=cv_truths)
 
 def initialize_model(args):
     def copy_conv_layer(src, dst):
@@ -95,11 +106,9 @@ def initialize_model(args):
 
     print('initialize model: input:%s output:%s' % \
         (args.input_model_file, args.output_model_file))
-    cnn_model = YoloTinyCNN()
+    cnn_model = YoloTinyCNN(args.gpu)
     chainer.serializers.load_npz(args.input_model_file, cnn_model)
-    if args.gpu >= 0: cnn_model.to_gpu()
-    predictor_model = YoloTiny()
-    if args.gpu >= 0: predictor_model.to_gpu()
+    predictor_model = YoloTiny(args.gpu)
 
     # serializers.save_npz()実行時の
     # "ValueError: uninitialized parameters cannot be serialized" を回避するために
@@ -149,38 +158,38 @@ def train_model(args):
     print('train model: gpu:%d epoch:%d batch_size:%d init_model:%s init_state:%s' % \
         (args.gpu, args.n_epoch, args.batch_size, args.init_model_file, args.init_state_file))
 
-    model = YoloTiny()
+    model = YoloTiny(args.gpu)
     if len(args.init_model_file) > 0:
         chainer.serializers.load_npz(args.init_model_file, model)
-    if args.gpu >= 0: model.to_gpu()
 
     optimizer = chainer.optimizers.MomentumSGD(
         lr=learning_schedules['0'], momentum=momentum)
-    optimizer.add_hook(chainer.optimizer.WeightDecay(weight_decay))
-    optimizer.use_cleargrads()
     optimizer.setup(model)
     if len(args.init_state_file) > 0:
         chainer.serializers.load_npz(args.init_state_file, optimizer)
+    optimizer.add_hook(chainer.optimizer.WeightDecay(weight_decay))
+    optimizer.use_cleargrads()
 
     logs = []
-    train_dataset = np.load(TRAIN_DATASET_PATH)
-    images = train_dataset['images']
-    ground_truths = train_dataset['ground_truths']
-
-    train_ixs = sorted(random.sample(range(ground_truths.shape[0]), int(ground_truths.shape[0] * 0.8)))
-    cv_ixs = sorted(list(set(range(ground_truths.shape[0])) - set(train_ixs)))
-    print('number of dataset: train:%d cv:%d' % (len(train_ixs), len(cv_ixs)))
+    dataset = np.load(DATASET_PATH)
+    train_images = dataset['train_images']
+    train_truths = dataset['train_ground_truths']
+    cv_images = dataset['cv_images']
+    cv_truths = dataset['cv_ground_truths']
+    print('number of dataset: train:%d cv:%d' % (len(train_truths), len(cv_truths)))
 
     for epoch in six.moves.range(1, args.n_epoch+1):
-        train_loss, train_acc = one_epoch_train(model, optimizer,
-            images[train_ixs], ground_truths[train_ixs], args.batch_size, epoch)
-        cv_loss, cv_acc = one_epoch_cv(model, optimizer,
-            images[cv_ixs], ground_truths[cv_ixs])
+        train_loss, train_acc = one_epoch_train(
+            model, optimizer, train_images, train_truths, args.batch_size, epoch)
+        cv_loss, cv_acc = one_epoch_cv(
+            model, optimizer, cv_images, cv_truths)
         print('epoch:%d trian loss:%f train acc:%f cv loss:%f cv acc:%f' %
             (epoch, train_loss, train_acc, cv_loss, cv_acc))
-        logs.append({'epoch': str(epoch),
+        logs.append({
+            'epoch': str(epoch),
             'train_loss': str(train_loss), 'train_acc': str(train_acc),
-            'cv_loss': str(cv_loss), 'cv_acc': str(cv_acc)})
+            'cv_loss': str(cv_loss), 'cv_acc': str(cv_acc)
+        })
         if (epoch % 10) == 0:
             chainer.serializers.save_npz('predictor_epoch{}.model'.format(epoch), model)
             chainer.serializers.save_npz('predictor_epoch{}.state'.format(epoch), optimizer)
@@ -197,15 +206,16 @@ def parse_arguments():
     parser = argparse.ArgumentParser(usage=usage)
     parser.add_argument('--action', '-a', type=str, dest='action', required=True)
     # prepare options
-    parser.add_argument('--catalog-file', type=str, dest='catalog_file')
-    # init options
-    parser.add_argument('--input-model-file', type=str, dest='input_model_file')
-    parser.add_argument('--output-model-file', type=str, dest='output_model_file', default=INIT_MODEL_PATH)
+    parser.add_argument('--train-catalog-file', type=str, dest='train_catalog_file', default='')
+    parser.add_argument('--cv-catalog-file', type=str, dest='cv_catalog_file', default='')
+    # initialize options
+    parser.add_argument('--input-model-file', type=str, dest='input_model_file', default='')
+    parser.add_argument('--output-model-file', type=str, dest='output_model_file', default=FIRST_MODEL_PATH)
     # train/predict options
     parser.add_argument('--gpu', '-g', type=int, default=-1)
     parser.add_argument('--batchsize', '-b', type=int, dest='batch_size', default=20)
     parser.add_argument('--epoch', '-e', type=int, dest='n_epoch', default=1)
-    parser.add_argument('--init-model-file', type=str, dest='init_model_file', default=INIT_MODEL_PATH)
+    parser.add_argument('--init-model-file', type=str, dest='init_model_file', default=FIRST_MODEL_PATH)
     parser.add_argument('--init-state-file', type=str, dest='init_state_file', default='')
     return parser.parse_args()
 
