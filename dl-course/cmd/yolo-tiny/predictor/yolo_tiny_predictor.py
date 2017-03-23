@@ -23,6 +23,15 @@ from yolo import *
 from image_process import *
 
 # configurations
+learning_schedules = {
+    '0'    : 1e-5,
+    '500'  : 1e-4,
+    '10000': 1e-5,
+    '20000': 1e-6
+}
+momentum = 0.9
+weight_decay = 0.005
+
 ORIG_WIDTH = 1280
 ORIG_HEIGHT = 960
 
@@ -100,15 +109,6 @@ def initialize_model(args):
     copy_conv_layer(cnn_model, predictor_model)
     chainer.serializers.save_npz(args.output_model_file, predictor_model)
 
-
-momentum = 0.9
-learning_schedules = { 
-    '0'    : 1e-5,
-    '500'  : 1e-4,
-    '10000': 1e-5,
-    '20000': 1e-6 
-}
-
 def one_epoch_train(model, optimizer, images, ground_truths, batch_size, epoch):
     n_train = len(ground_truths)
     perm = np.random.permutation(n_train)
@@ -156,9 +156,9 @@ def train_model(args):
 
     optimizer = chainer.optimizers.MomentumSGD(
         lr=learning_schedules['0'], momentum=momentum)
+    optimizer.add_hook(chainer.optimizer.WeightDecay(weight_decay))
     optimizer.use_cleargrads()
     optimizer.setup(model)
-#    optimizer.add_hook(chainer.optimizer.WeightDecay(0.0005))
     if len(args.init_state_file) > 0:
         chainer.serializers.load_npz(args.init_state_file, optimizer)
 

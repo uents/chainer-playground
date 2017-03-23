@@ -110,14 +110,13 @@ class YoloTiny(chainer.Chain):
         h = F.leaky_relu(self.conv8(h), slope=0.1)
         h = F.leaky_relu(self.conv9(h), slope=0.1)
         h = F.leaky_relu(self.fc1(h), slope=0.1)
-        h = F.leaky_relu(self.fc2(h), slope=0.1)
         h = F.dropout(h, train=self.train, ratio=0.5)
+        h = F.leaky_relu(self.fc2(h), slope=0.1)
         h = self.fc3(h) # (batch_size, ((5*N_BOXES)+N_CLASSES)*N_GRID*N_GRID)
 
         # extract result tensors
         h = F.reshape(h, (batch_size, (5*N_BOXES)+N_CLASSES, N_GRID, N_GRID))
         x, y, w, h, conf, prob = F.split_axis(h, indices_or_sections=(1,2,3,4,5), axis=1)
-        # activation
         return F.sigmoid(x), F.sigmoid(y), F.sigmoid(w), F.sigmoid(h), F.sigmoid(conf), F.sigmoid(prob)
 
     def __call__(self, x, t):
