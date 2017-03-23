@@ -180,5 +180,8 @@ class YoloTiny(chainer.Chain):
         else:
             return px, py, pw, ph, pconf, pprob
 
+    def inference(self, x):
+        return self.forward(x)
+
     def __variable(self, v, t):
         return chainer.Variable(xp.asarray(v).astype(t))
