@@ -13,6 +13,8 @@ import sys
 import os
 import argparse
 import math
+import random
+import numpy as np
 import pandas as pd
 import cv2
 import json
@@ -79,39 +81,51 @@ def make_catalog_item(camera_image_dir, label_image_dir, label_image_path, df_it
 '''
 学習データセットのカタログ情報を生成する
 '''
-def make_catalog(input_dir, output_dir):
-    dataset = []
+def make_catalog(input_dir, train_ratio=0.8):
     camera_image_dir = os.path.join(input_dir, 'Single')
     label_image_dir = os.path.join(input_dir, 'mask_label', 'single')
 
     # クラスとRGB値の関係テーブルをロード
     df_items = pd.read_csv(os.path.join(label_image_dir, '..', 'item_table.csv'),
                            encoding='cp932')
-    # ラベル画像を起点に情報を収集
+    # ラベル画像を起点にカタログ情報を収集
+    dataset = np.array([])
     count = 1
     for path in find_label_images(label_image_dir):
-        sys.stdout.write('\r{0} parse : {1}'.format(count, path))
-        item = make_catalog_item(camera_image_dir, label_image_dir,
-                                 path, df_items)
-        dataset.append(item)
+        sys.stdout.write('\r%d parse %s' % (count, path))
+        item = make_catalog_item(camera_image_dir, label_image_dir, path, df_items)
+        dataset = np.append(dataset, item)
         count += 1
-    return {'dataset': dataset}
-
+    sys.stdout.write('\n')
+    # カタログ情報を訓練用とクロスバリデーション用に分割
+    whole_ixs = range(0, len(dataset))
+    train_ixs = random.sample(whole_ixs, int(len(whole_ixs) * train_ratio))
+    cv_ixs = list(set(whole_ixs) - set(train_ixs))
+    print('number of dataset: train:%d cv:%d' % (len(train_ixs), len(cv_ixs)))
+    return {'dataset': dataset[train_ixs].tolist()}, {'dataset': dataset[cv_ixs].tolist()}
 
 def parse_arguments():
-    usage = 'make training dataset catalog (sample code)'
-    parser = argparse.ArgumentParser(usage=usage)
+    description = 'make training dataset catalog'
+    parser = argparse.ArgumentParser(description=description)
     parser.add_argument('--input-dir', type=str, dest='input_dir', required=True)
-    parser.add_argument('--output-file', type=str, dest='output_file', required=True)
+    parser.add_argument('--train-catalog-file', type=str, dest='train_file', required=True)
+    parser.add_argument('--cv-catalog-file', type=str, dest='cv_file', required=True)
+    parser.add_argument('--train-ratio', type=float, dest='train_ratio', default=0.8)
     return parser.parse_args()
 
 if __name__ == '__main__':
     args = parse_arguments()
-    output_dir = os.path.split(args.output_file)[0]
-    catalog = make_catalog(args.input_dir, output_dir)
-    
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
-    with open(args.output_file, 'w') as fp:
-        json.dump(catalog, fp, sort_keys=True, ensure_ascii=False, indent=2)
-    print('\nfinished')
+    train_catalog, cv_catalog = make_catalog(args.input_dir, args.train_ratio)
+
+    train_dir = os.path.split(args.train_file)[0]
+    if not os.path.exists(train_dir):
+        os.makedirs(train_dir)
+    cv_dir = os.path.split(args.train_file)[0]
+    if not os.path.exists(cv_dir):
+        os.makedirs(cv_dir)
+
+    with open(args.train_file, 'w') as fp:
+        json.dump(train_catalog, fp, sort_keys=True, ensure_ascii=False, indent=2)
+    with open(args.cv_file, 'w') as fp:
+        json.dump(cv_catalog, fp, sort_keys=True, ensure_ascii=False, indent=2)
+    print('done')
