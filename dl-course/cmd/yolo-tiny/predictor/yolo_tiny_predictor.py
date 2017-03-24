@@ -58,14 +58,14 @@ def parse_ground_truth(truth, orig_width, orig_height):
         'w' : tw / INPUT_SIZE,
         'h' : th / INPUT_SIZE
     }
-    one_hot_confidence_vector = np.eye(N_CLASSES)[np.array(tconf)]
+    one_hot_confidence = np.eye(N_CLASSES)[np.array(tconf)]
 
     # detection layerのテンソルに変換
     tensor = np.zeros(((5*N_BOXES)+N_CLASSES, N_GRID, N_GRID)).astype(np.float32)
     tensor[:5, active_grid_cell['y'], active_grid_cell['x']] \
         = [norm_truth['x'], norm_truth['y'], norm_truth['w'], norm_truth['h'], 1.0]
     tensor[5:, active_grid_cell['y'], active_grid_cell['x']] \
-        = one_hot_confidence_vector
+        = one_hot_confidence
     return tensor
 
 def make_ground_truth_tensor(truths, orig_width, orig_height):
@@ -118,6 +118,13 @@ def initialize_model(args):
     copy_conv_layer(cnn_model, predictor_model)
     chainer.serializers.save_npz(args.output_model_file, predictor_model)
 
+
+def print_boxes(detected_boxes):
+    print('---')
+    for i, boxes in enumerate(detected_boxes):
+        print(i, len(boxes))
+    print('---')
+
 def one_epoch_train(model, optimizer, images, ground_truths, batch_size, epoch):
     n_train = len(ground_truths)
     perm = np.random.permutation(n_train)
@@ -129,15 +136,15 @@ def one_epoch_train(model, optimizer, images, ground_truths, batch_size, epoch):
         ts = chainer.Variable(xp.asarray(ground_truths[ix]).astype(np.float32))
 
         model.train = True
-        batch_count = (epoch - 1) * batch_size + count
-        if str(batch_count) in learning_schedules:
-            optimizer.lr = learning_schedules[str(batch_count)]
+        iteration = (epoch - 1) * batch_size + count
+        if str(iteration) in learning_schedules:
+            optimizer.lr = learning_schedules[str(iteration)]
         optimizer.update(model, xs, ts)
-#        print('mini-batch:%d loss:%f' % ((count/batch_size)+1, model.loss.data))
-#        print('mini-batch:%d loss:%f acc:%f' % ((count/batch_size)+1, model.loss.data, model.accuracy.data))
+        print_boxes(model.detected_boxes)
         sum_loss += model.loss.data * len(ix) / n_train
-        #sum_acc += model.accuracy.data * len(ix) / n_train
+#        sum_acc += model.accuracy.data * len(ix) / n_train
     return sum_loss, sum_acc
+
 
 def one_epoch_cv(model, optimizer, images, ground_truths):
     n_valid = len(ground_truths)
@@ -149,7 +156,8 @@ def one_epoch_cv(model, optimizer, images, ground_truths):
         ts = chainer.Variable(xp.asarray(ground_truths[ix]).astype(np.int32))
 
         model.train = False
-        model(xs, ts)
+        detected_boxes = model(xs, ts)
+        print_boxes(model.detected_boxes)
         sum_loss += model.loss.data * len(ix) / n_valid
 #        sum_acc += model.accuracy.data * len(ix) / n_valid
     return sum_loss, sum_acc

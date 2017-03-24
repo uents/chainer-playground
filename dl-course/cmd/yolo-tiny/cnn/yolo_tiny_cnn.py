@@ -85,10 +85,9 @@ def train_model(args):
     print('train model: gpu:%d epoch:%d batch_size:%d init_model:%s init_state:%s' % \
         (args.gpu, args.n_epoch, args.batch_size, args.init_model_file, args.init_state_file))
 
-    model = YoloTinyCNN()
+    model = YoloTinyCNN(args.gpu)
     if len(args.init_model_file) > 0:
         chainer.serializers.load_npz(args.init_model_file, model)
-    if args.gpu >= 0: model.to_gpu()
 
     optimizer = chainer.optimizers.Adam()
     optimizer.setup(model)

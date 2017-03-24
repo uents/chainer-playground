@@ -12,6 +12,9 @@ import chainer.functions as F
 import chainer.links as L
 from chainer import Variable, Function, Link
 
+sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'lib'))
+from numeric import *
+
 # configurations
 xp = np
 N_BOXES = 1
@@ -93,6 +96,8 @@ class YoloTiny(chainer.Chain):
             fc3 = L.Linear(None, ((N_BOXES*5)+N_CLASSES) * (N_GRID**2))
         )
         self.train = False
+        self.class_prob_thresh = 0.3
+        self.iou_thresh = 0.3
         self.gpu = gpu
         if self.gpu >= 0: self.to_gpu()
 
@@ -171,17 +176,73 @@ class YoloTiny(chainer.Chain):
         conf_loss = F.sum(conf_learning_scale * ((tconf - pconf) ** 2))
         prob_loss = F.sum(prob_learning_scale * F.reshape(F.sum(((tprob - pprob) ** 2), axis=1), prob_learning_scale.shape))
 #        prob_loss = F.sum((tprob - pprob) ** 2)
-        print("loss x:%f y:%f w:%f h:%f conf:%f prob:%f" %
-            (x_loss.data, y_loss.data, w_loss.data, h_loss.data, conf_loss.data, prob_loss.data))
 
+        if self.train:
+            print("loss x:%f y:%f w:%f h:%f conf:%f prob:%f" %
+                  (x_loss.data, y_loss.data, w_loss.data, h_loss.data, conf_loss.data, prob_loss.data))
         self.loss = x_loss + y_loss + w_loss + h_loss + conf_loss + prob_loss
+
+        if self.gpu >= 0:
+            px.to_cpu(), py.to_cpu(), pw.to_cpu(), ph.to_cpu(), pconf.to_cpu(), pprob.to_cpu()
+        self.detected_boxes = self.__detection(px, py, pw, ph, pconf, pprob)
+        if self.gpu >= 0:
+            px.to_gpu(), py.to_gpu(), pw.to_gpu(), ph.to_gpu(), pconf.to_gpu(), pprob.to_gpu()
+
         if self.train:
             return self.loss
         else:
-            return px, py, pw, ph, pconf, pprob
+            return self.detected_boxes
 
     def inference(self, x):
-        return self.forward(x)
+        px, py, pw, ph, pconf, pprob = self.forward(x)
+        return self.__detection(px, py, pw, ph, pconf, pprob)
+
+    def __detection(self, px, py, pw, ph, pconf, pprob):
+        batch_size = px.data.shape[0]
+        _px = F.reshape(px, (batch_size, N_GRID, N_GRID)).data
+        _py = F.reshape(py, (batch_size, N_GRID, N_GRID)).data
+        _pw = F.reshape(pw, (batch_size, N_GRID, N_GRID)).data
+        _ph = F.reshape(ph, (batch_size, N_GRID, N_GRID)).data
+        _pconf = F.reshape(pconf, (batch_size, N_GRID, N_GRID)).data
+        _pprob = pprob.data
+
+        boxes = []
+        for i in range(0, batch_size):
+            candidates = self.__select_candidates(_px[i], _py[i], _pw[i], _ph[i], _pconf[i], _pprob[i])
+            winners = self.__nms(candidates)
+            boxes.append(winners)
+        return boxes
+
+    def __select_candidates(self, px, py, pw, ph, pconf, pprob):
+        class_probs = pprob * pconf # クラス確率を算出
+        detected_ixs = class_probs.max(axis=0) > self.class_prob_thresh # 検出候補を決定
+        candidates = []
+        for i in range(0, detected_ixs.sum()):
+            candidates.append({
+                'box': Box(px[detected_ixs][i], py[detected_ixs][i],
+                        pw[detected_ixs][i], ph[detected_ixs][i]),
+                'conf': pconf[detected_ixs][i],
+                'prob': pprob.transpose(1,2,0)[detected_ixs][i],
+                'objectness': pprob.transpose(1,2,0)[detected_ixs][i].max() * pconf[detected_ixs][i],
+                'label': pprob.transpose(1,2,0)[detected_ixs][i].argmax()
+            })
+        return candidates
+
+    def __nms(self, candidates):
+        sorted(candidates, key=lambda x: x['objectness'], reverse=True)
+        winners = []
+
+        if len(candidates) == 0:
+            return winners
+
+        winners.append(candidates[0]) # 第１候補は必ず採用
+        for i in range(1, len(candidates)): # 第２候補以降は上位の候補とのIOU次第
+            for j in range(0, i):
+                if Box.iou(candidates[i]['box'], candidates[j]['box']) > self.iou_thresh:
+                    break
+            else:
+                winners.append(candidates[i])
+        return winners
 
     def __variable(self, v, t):
         return chainer.Variable(xp.asarray(v).astype(t))
