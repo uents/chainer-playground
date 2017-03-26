@@ -26,12 +26,13 @@ class Box():
     def height(self):
         return self.bottom - self.top
 
-    def area(self):
-        return float(self.width * self.height)
-
+    @property
     def vertex(self):
         return ((self.left, self.top), (self.right-1, self.top),
                 (self.left, self.bottom-1), (self.right-1, self.bottom-1))
+
+    def area(self):
+        return float(self.width * self.height)
 
     @classmethod
     def overlap(clazz, box1, box2):

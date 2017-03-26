@@ -208,27 +208,29 @@ class YoloTiny(chainer.Chain):
 
         boxes = []
         for i in range(0, batch_size):
-            candidates = self.__select_candidates(_px[i], _py[i], _pw[i], _ph[i], _pconf[i], _pprob[i])
-            winners = self.__nms(candidates)
+            candidates = self.__select_candidates(
+                _px[i], _py[i], _pw[i], _ph[i], _pconf[i], _pprob[i], self.class_prob_thresh)
+            winners = self.__nms(candidates, self.iou_thresh)
             boxes.append(winners)
         return boxes
 
-    def __select_candidates(self, px, py, pw, ph, pconf, pprob):
-        class_probs = pprob * pconf # クラス確率を算出
-        detected_ixs = class_probs.max(axis=0) > self.class_prob_thresh # 検出候補を決定
+    def __select_candidates(self, px, py, pw, ph, pconf, pprob, class_prob_thresh):
+        class_prob_map = pprob * pconf # クラス確率を算出 (N_CLASSES,N_GRID,N_GRID)
+        candidate_map = class_prob_map.max(axis=0) > class_prob_thresh # 検出グリッド候補を決定 (N_GRID,N_GRID)
+        candidate_label_map = class_prob_map.argmax(axis=0) # 検出グリッド候補のラベルを抽出 (N_GRID,N_GRID)
         candidates = []
-        for i in range(0, detected_ixs.sum()):
+        for i in range(0, candidate_map.sum()):
             candidates.append({
-                'box': Box(px[detected_ixs][i], py[detected_ixs][i],
-                        pw[detected_ixs][i], ph[detected_ixs][i]),
-                'conf': pconf[detected_ixs][i],
-                'prob': pprob.transpose(1,2,0)[detected_ixs][i],
-                'objectness': pprob.transpose(1,2,0)[detected_ixs][i].max() * pconf[detected_ixs][i],
-                'label': pprob.transpose(1,2,0)[detected_ixs][i].argmax()
+                'box': Box(px[candidate_map][i], py[candidate_map][i],
+                        pw[candidate_map][i], ph[candidate_map][i]),
+                #'conf': pconf[candidate_map][i],
+                #'prob': pprob.transpose(1,2,0)[candidate_map][i],
+                'objectness': class_prob_map.max(axis=0)[candidate_map][i],
+                'label': candidate_label_map[candidate_map][i]
             })
-        return candidates
+        return candidatess
 
-    def __nms(self, candidates):
+    def __nms(self, candidates, iou_thresh):
         sorted(candidates, key=lambda x: x['objectness'], reverse=True)
         winners = []
 
@@ -238,7 +240,7 @@ class YoloTiny(chainer.Chain):
         winners.append(candidates[0]) # 第１候補は必ず採用
         for i in range(1, len(candidates)): # 第２候補以降は上位の候補とのIOU次第
             for j in range(0, i):
-                if Box.iou(candidates[i]['box'], candidates[j]['box']) > self.iou_thresh:
+                if Box.iou(candidates[i]['box'], candidates[j]['box']) > iou_thresh:
                     break
             else:
                 winners.append(candidates[i])
