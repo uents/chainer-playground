@@ -56,7 +56,22 @@ class Box():
 
     @classmethod
     def iou(self, box1, box2):
-        return Box.intersection(box1, box2) / Box.union(box1, box2)
+        union = Box.union(box1, box2)
+        return Box.intersection(box1, box2) / Box.union(box1, box2) if union > 0 else 0.0
+
+    @classmethod
+    def best_iou(self, pred_box, truth_boxes):
+        ious = np.asarray([Box.iou(pred_box, truth_box) for truth_box in truth_boxes])
+        return ious.max(), truth_boxes[ious.argmax()]
+
+    @classmethod
+    def correct(self, pred_box, truth_boxes):
+        best_score, best_truth = Box.best_iou(pred_box, truth_boxes)
+        if best_score <= 0.5:
+            return False
+        elif box.clazz != best_truth.clazz:
+            return False
+        return True
 
 
 class GroundTruth():

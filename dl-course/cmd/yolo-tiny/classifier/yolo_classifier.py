@@ -69,7 +69,7 @@ def one_epoch_cv(model, optimizer, images, labels):
 
     sum_loss, sum_acc = (0., 0.)
     for count in six.moves.range(0, n_valid, 10):
-        ix = np.arange(count, count+10)
+        ix = np.arange(count, min(count+10, n_valid))
         xs = chainer.Variable(xp.asarray(images[ix]).astype(np.float32).transpose(0,3,1,2))
         ts = chainer.Variable(xp.asarray(labels[ix].ravel()).astype(np.int32))
 

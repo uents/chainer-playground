@@ -183,14 +183,14 @@ class YoloDetector(chainer.Chain):
 
         if self.gpu >= 0:
             px.to_cpu(), py.to_cpu(), pw.to_cpu(), ph.to_cpu(), pconf.to_cpu(), pprob.to_cpu()
-        self.detected_boxes = self.__detection(px, py, pw, ph, pconf, pprob)
+        self.detections = self.__detection(px, py, pw, ph, pconf, pprob)
         if self.gpu >= 0:
             px.to_gpu(), py.to_gpu(), pw.to_gpu(), ph.to_gpu(), pconf.to_gpu(), pprob.to_gpu()
 
         if self.train:
             return self.loss
         else:
-            return self.detected_boxes
+            return self.detections
 
     def inference(self, x):
         px, py, pw, ph, pconf, pprob = self.forward(x)
@@ -205,13 +205,13 @@ class YoloDetector(chainer.Chain):
         _pconf = F.reshape(pconf, (batch_size, N_GRID, N_GRID)).data
         _pprob = pprob.data
 
-        boxes = []
+        detections = []
         for i in range(0, batch_size):
             candidates = self.__select_candidates(
                 _px[i], _py[i], _pw[i], _ph[i], _pconf[i], _pprob[i], self.class_prob_thresh)
             winners = self.__nms(candidates, self.iou_thresh)
-            boxes.append(winners)
-        return boxes
+            detections.append(winners)
+        return detections
 
     def __select_candidates(self, px, py, pw, ph, pconf, pprob, class_prob_thresh):
         class_prob_map = pprob * pconf # クラス確率を算出 (N_CLASSES,N_GRID,N_GRID)
@@ -219,18 +219,20 @@ class YoloDetector(chainer.Chain):
         candidate_label_map = class_prob_map.argmax(axis=0) # 検出グリッド候補のラベルを抽出 (N_GRID,N_GRID)
         candidates = []
         for i in range(0, candidate_map.sum()):
-            candidates.append({
-                'box': Box(px[candidate_map][i], py[candidate_map][i],
-                        pw[candidate_map][i], ph[candidate_map][i]),
-                #'conf': pconf[candidate_map][i],
-                #'prob': pprob.transpose(1,2,0)[candidate_map][i],
-                'objectness': class_prob_map.max(axis=0)[candidate_map][i],
-                'label': candidate_label_map[candidate_map][i]
-            })
+            candidates.append(
+                Box(x=px[candidate_map][i],
+                    y=py[candidate_map][i],
+                    width=pw[candidate_map][i],
+                    height=ph[candidate_map][i],
+                    #'conf': pconf[candidate_map][i],
+                    #'prob': pprob.transpose(1,2,0)[candidate_map][i],
+                    clazz=candidate_label_map[candidate_map][i],
+                    objectness=class_prob_map.max(axis=0)[candidate_map][i]
+                ))
         return candidates
 
     def __nms(self, candidates, iou_thresh):
-        sorted(candidates, key=lambda x: x['objectness'], reverse=True)
+        sorted(candidates, key=lambda x: x.objectness, reverse=True)
         winners = []
 
         if len(candidates) == 0:
@@ -239,7 +241,7 @@ class YoloDetector(chainer.Chain):
         winners.append(candidates[0]) # 第１候補は必ず採用
         for i in range(1, len(candidates)): # 第２候補以降は上位の候補とのIOU次第
             for j in range(0, i):
-                if Box.iou(candidates[i]['box'], candidates[j]['box']) > iou_thresh:
+                if Box.iou(candidates[i], candidates[j]) > iou_thresh:
                     break
             else:
                 winners.append(candidates[i])

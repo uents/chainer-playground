@@ -87,12 +87,6 @@ def initialize_model(args):
     chainer.serializers.save_npz(args.output_model_file, detector_model)
 
 
-def print_boxes(detected_boxes):
-    print('---')
-    for i, boxes in enumerate(detected_boxes):
-        print(i, len(boxes))
-    print('---')
-
 def parse_ground_truth(bounding_box, real_width, real_height):
     tw = bounding_box.width * INPUT_SIZE / real_width
     th = bounding_box.height * INPUT_SIZE / real_height
@@ -124,13 +118,31 @@ def make_ground_truth_tensor(ground_truth):
                         for box in ground_truth.bounding_boxes]
     return reduce(lambda x, y: x + y, each_tensors)
 
+def evaluate(detections, ground_truths):
+    positives = {str(i): {'true': 0, 'false': 0}  for i in range(0, N_CLASSES)}
+    for detection, ground_truth in zip(detections, ground_truths):
+        for box in detection:
+            if Box.correct(box, ground_truth.bounding_boxes):
+                positives[str(box.clazz)]['true'] += 1
+            else:
+                positives[str(box.clazz)]['false'] += 1
+    return positives
+
+def average_precisions(positives):
+    def precision(tp, fp):
+        if tp == 0 and fp == 0:
+            return 0
+        else:
+            return float(tp) / (tp + fp)
+    return {str(p[0]): precision(p[1]['true'], p[1]['false']) for p in positives.items()}
+
 def one_epoch_train(model, optimizer, images, ground_truths, batch_size, epoch):
     n_train = len(ground_truths)
     perm = np.random.permutation(n_train)
     image_tensors  = np.asarray([image.image for image in images]).transpose(0,3,1,2)
     ground_truth_tensors = np.asarray([make_ground_truth_tensor(truth) for truth in ground_truths])
 
-    sum_loss, sum_acc = (0., 0.)
+    sum_loss, sum_map = (0., 0.)
     for count in six.moves.range(0, n_train, batch_size):
         ix = perm[count:count+batch_size]
         xs = chainer.Variable(xp.asarray(image_tensors[ix]).astype(np.float32))
@@ -141,28 +153,32 @@ def one_epoch_train(model, optimizer, images, ground_truths, batch_size, epoch):
         if str(iteration) in learning_schedules:
             optimizer.lr = learning_schedules[str(iteration)]
         optimizer.update(model, xs, ts)
-        print_boxes(model.detected_boxes)
         sum_loss += model.loss.data * len(ix) / n_train
-#        sum_acc += model.accuracy.data * len(ix) / n_train
-    return sum_loss, sum_acc
+
+        positives = evaluate(model.detections, ground_truths[ix])
+        avg_precisions = average_precisions(positives)
+        sum_map += sum(avg_precisions.values())/len(avg_precisions.values())
+    return sum_loss, sum_map
 
 def one_epoch_cv(model, optimizer, images, ground_truths):
     n_valid = len(ground_truths)
     image_tensors  = np.asarray([image.image for image in images]).transpose(0,3,1,2)
     ground_truth_tensors = np.asarray([make_ground_truth_tensor(truth) for truth in ground_truths])
 
-    sum_loss, sum_acc = (0., 0.)
+    sum_loss, sum_map = (0., 0.)
     for count in six.moves.range(0, n_valid, 10):
-        ix = np.arange(count, count+10)
+        ix = np.arange(count, min(count+10, n_valid))
         xs = chainer.Variable(xp.asarray(image_tensors[ix]).astype(np.float32))
         ts = chainer.Variable(xp.asarray(ground_truth_tensors[ix]).astype(np.float32))
 
         model.train = False
-        detected_boxes = model(xs, ts)
-        print_boxes(detected_boxes)
+        detections = model(xs, ts)
         sum_loss += model.loss.data * len(ix) / n_valid
-#        sum_acc += model.accuracy.data * len(ix) / n_valid
-    return sum_loss, sum_acc
+
+        positives = evaluate(model.detections, ground_truths[ix])
+        avg_precisions = average_precisions(positives)
+        sum_map += sum(avg_precisions.values())/len(avg_precisions.values())
+    return sum_loss, sum_map
 
 def train_model(args):
     print('train model: gpu:%d epoch:%d batch_size:%d init_model:%s init_state:%s' % \
@@ -189,16 +205,16 @@ def train_model(args):
     print('number of dataset: train:%d cv:%d' % (len(train_truths), len(cv_truths)))
 
     for epoch in six.moves.range(1, args.n_epoch+1):
-        train_loss, train_acc = one_epoch_train(
+        train_loss, train_map = one_epoch_train(
             model, optimizer, train_images, train_truths, args.batch_size, epoch)
-        cv_loss, cv_acc = one_epoch_cv(
+        cv_loss, cv_map = one_epoch_cv(
             model, optimizer, cv_images, cv_truths)
-        print('epoch:%d trian loss:%f train acc:%f cv loss:%f cv acc:%f' %
-            (epoch, train_loss, train_acc, cv_loss, cv_acc))
+        print('epoch:%d trian loss:%f train map:%f cv loss:%f cv map:%f' %
+            (epoch, train_loss, train_map, cv_loss, cv_map))
         logs.append({
             'epoch': str(epoch),
-            'train_loss': str(train_loss), 'train_acc': str(train_acc),
-            'cv_loss': str(cv_loss), 'cv_acc': str(cv_acc)
+            'train_loss': str(train_loss), 'train_map': str(train_map),
+            'cv_loss': str(cv_loss), 'cv_map': str(cv_map)
         })
         if (epoch % 10) == 0:
             chainer.serializers.save_npz('detector_epoch{}.model'.format(epoch), model)
