@@ -9,26 +9,24 @@ import argparse
 import math
 import random
 import numpy as np
-import scipy.io
 import cv2
 import json
 
 import chainer
 import chainer.functions as F
 import chainer.links as L
-from chainer import Variable, Function, Link
 
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'lib'))
 from yolo import *
 from image_process import *
 
 # configurations
-DATASET_PATH = os.path.join('.', 'cnn_dataset.npz')
+DATASET_PATH = os.path.join('.', 'classifier_dataset.npz')
 
 
 def parse_item_of_dataset(item):
-    image = load_image(item['color_image_path'], INPUT_SIZE, INPUT_SIZE)[0]
-    label = item['classes']
+    image = Image(item['color_image_path'], INPUT_SIZE, INPUT_SIZE).image
+    label = [int(clazz) for clazz in item['classes']]
     return {'image': image, 'label': label}
 
 def load_dataset(catalog_file):
@@ -36,7 +34,7 @@ def load_dataset(catalog_file):
         catalog = json.load(fp)
     items = [parse_item_of_dataset(item) for item in catalog['dataset']]
     images = np.asarray([item['image'] for item in items])
-    labels = np.asarray([item['label'] for imte in items]).astype(np.int32)
+    labels = np.asarray([item['label'] for item in items])
     return images, labels
 
 def prepare_dataset(args):
@@ -85,7 +83,7 @@ def train_model(args):
     print('train model: gpu:%d epoch:%d batch_size:%d init_model:%s init_state:%s' % \
         (args.gpu, args.n_epoch, args.batch_size, args.init_model_file, args.init_state_file))
 
-    model = YoloTinyCNN(args.gpu)
+    model = YoloClassifier(args.gpu)
     if len(args.init_model_file) > 0:
         chainer.serializers.load_npz(args.init_model_file, model)
 
@@ -115,12 +113,12 @@ def train_model(args):
             'cv_loss': str(cv_loss), 'cv_acc': str(cv_acc)
         })
         if (epoch % 10) == 0:
-            chainer.serializers.save_npz('cnn_epoch{}.model'.format(epoch), model)
-            chainer.serializers.save_npz('cnn_epoch{}.state'.format(epoch), optimizer)
+            chainer.serializers.save_npz('classifier_epoch{}.model'.format(epoch), model)
+            chainer.serializers.save_npz('classifier_epoch{}.state'.format(epoch), optimizer)
 
-    chainer.serializers.save_npz('cnn_final.model', model)
-    chainer.serializers.save_npz('cnn_final.state', optimizer)
-    with open('cnn_train_log.json', 'w') as fp:
+    chainer.serializers.save_npz('classifier_final.model', model)
+    chainer.serializers.save_npz('classifier_final.state', optimizer)
+    with open('classifier_train_log.json', 'w') as fp:
         json.dump({'epoch': str(args.n_epoch), 'batch_size': str(args.batch_size), 'logs': logs},
             fp, sort_keys=True, ensure_ascii=False, indent=2)
 

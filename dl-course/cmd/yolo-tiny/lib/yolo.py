@@ -10,10 +10,9 @@ import numpy as np
 import chainer
 import chainer.functions as F
 import chainer.links as L
-from chainer import Variable, Function, Link
 
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'lib'))
-from numeric import *
+from bounding_box import *
 
 # configurations
 xp = np
@@ -27,13 +26,13 @@ N_CNN_LAYER = 7
 
 
 '''
-yolo-tinyについては、Darknetの以下のリンク先を参考に実装。tiny-yoloとは異なるので注意
+YOLO(YOLO Tiny)については、Darknetの以下のリンク先を参考に実装。Tiny YOLOとは異なるので注意
 https://github.com/pjreddie/darknet/blob/8f1b4e0962857d402f9d017fcbf387ef0eceb7c4/cfg/yolo-tiny.cfg
 '''
 
-class YoloTinyCNN(chainer.Chain):
+class YoloClassifier(chainer.Chain):
     def __init__(self, gpu=-1):
-        super(YoloTinyCNN, self).__init__(
+        super(YoloClassifier, self).__init__(
             conv1  = L.Convolution2D(3,      16, ksize=3, stride=1, pad=1),
             conv2  = L.Convolution2D(None,   32, ksize=3, stride=1, pad=1),
             conv3  = L.Convolution2D(None,   64, ksize=3, stride=1, pad=1),
@@ -79,9 +78,9 @@ class YoloTinyCNN(chainer.Chain):
         else:
             return F.softmax(h)
 
-class YoloTiny(chainer.Chain):
+class YoloDetector(chainer.Chain):
     def __init__(self, gpu=-1):
-        super(YoloTiny, self).__init__(
+        super(YoloDetector, self).__init__(
             conv1  = L.Convolution2D(3,      16, ksize=3, stride=1, pad=1),
             conv2  = L.Convolution2D(None,   32, ksize=3, stride=1, pad=1),
             conv3  = L.Convolution2D(None,   64, ksize=3, stride=1, pad=1),
@@ -228,7 +227,7 @@ class YoloTiny(chainer.Chain):
                 'objectness': class_prob_map.max(axis=0)[candidate_map][i],
                 'label': candidate_label_map[candidate_map][i]
             })
-        return candidatess
+        return candidates
 
     def __nms(self, candidates, iou_thresh):
         sorted(candidates, key=lambda x: x['objectness'], reverse=True)

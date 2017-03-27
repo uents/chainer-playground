@@ -11,8 +11,9 @@ import random
 import numpy as np
 import cv2
 
-def load_image(path, width, height):
-    image = cv2.imread(path)
-    orig_height, orig_width, _ = image.shape
-    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-    return cv2.resize(image, (width, height)), orig_width, orig_height
+class Image():
+    def __init__(self, path, width, height):
+        image = cv2.imread(path)
+        self.real_height, self.real_width, _ = image.shape
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        self.image = cv2.resize(image, (width, height))

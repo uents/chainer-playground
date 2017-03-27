@@ -12,11 +12,13 @@ import numpy as np
 
 
 class Box():
-    def __init__(self, x, y, w, h):
+    def __init__(self, x, y, width, height, clazz=0, objectness=1.0):
         self.left = x
         self.top = y
-        self.right = x + w
-        self.bottom = y + h
+        self.right = x + width
+        self.bottom = y + height
+        self.clazz = clazz
+        self.objectness = objectness
 
     @property
     def width(self):
@@ -35,7 +37,7 @@ class Box():
         return float(self.width * self.height)
 
     @classmethod
-    def overlap(clazz, box1, box2):
+    def overlap(self, box1, box2):
         left = max(box1.left, box2.left)
         top = max(box1.top, box2.top)
         right = min(box1.right, box2.right)
@@ -45,13 +47,20 @@ class Box():
         return Box(left, top, width, height)
 
     @classmethod
-    def intersection(clazz, box1, box2):
+    def intersection(self, box1, box2):
         return Box.overlap(box1, box2).area()
 
     @classmethod
-    def union(clazz, box1, box2):
+    def union(self, box1, box2):
         return box1.area() + box2.area() - Box.intersection(box1, box2)
 
     @classmethod
-    def iou(clazz, box1, box2):
+    def iou(self, box1, box2):
         return Box.intersection(box1, box2) / Box.union(box1, box2)
+
+
+class GroundTruth():
+    def __init__(self, width, height, bounding_boxes=[]):
+        self.width = width
+        self.height = height
+        self.bounding_boxes = bounding_boxes
