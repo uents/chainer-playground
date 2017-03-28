@@ -54,7 +54,7 @@ def one_epoch_train(model, optimizer, images, labels, batch_size):
     loss, acc = (0., 0.)
     for count in six.moves.range(0, n_train, batch_size):
         ix = perm[count:count+batch_size]
-        xs = chainer.Variable(xp.asarray(images[ix]).astype(np.float32).transpose(0,3,1,2))
+        xs = chainer.Variable(xp.asarray(images[ix]).astype(np.float32).transpose(0,3,1,2) / 255.)
         ts = chainer.Variable(xp.asarray(labels[ix].ravel()).astype(np.int32))
 
         model.train = True
@@ -70,7 +70,7 @@ def one_epoch_cv(model, optimizer, images, labels):
     loss, acc = (0., 0.)
     for count in six.moves.range(0, n_valid, 10):
         ix = np.arange(count, min(count+10, n_valid))
-        xs = chainer.Variable(xp.asarray(images[ix]).astype(np.float32).transpose(0,3,1,2))
+        xs = chainer.Variable(xp.asarray(images[ix]).astype(np.float32).transpose(0,3,1,2) / 255.)
         ts = chainer.Variable(xp.asarray(labels[ix].ravel()).astype(np.int32))
 
         model.train = False

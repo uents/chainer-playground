@@ -24,9 +24,9 @@ from image_process import *
 # configurations
 learning_schedules = {
     '0'    : 1e-5,
-    '500'  : 1e-4, 
+    '500'  : 1e-4,
     '10000': 1e-5,
-    '20000': 1e-6 
+    '20000': 1e-6
 }
 momentum = 0.9
 weight_decay = 0.005
@@ -154,7 +154,7 @@ def average_precisions(positives):
 
 def one_epoch_train(model, optimizer, images, ground_truths, batch_size, epoch):
     n_train = len(ground_truths)
-    image_tensors  = np.asarray([image.image for image in images]).transpose(0,3,1,2)
+    image_tensors  = np.asarray([image.image for image in images]).transpose(0,3,1,2) / 255.
     ground_truth_tensors = np.asarray([make_ground_truth_tensor(truth) for truth in ground_truths])
 
     loss = 0.
@@ -180,7 +180,7 @@ def one_epoch_train(model, optimizer, images, ground_truths, batch_size, epoch):
         for box in detection:
             print(count, box, truth.bounding_boxes[0])
         count += 1
-    
+
     positives = evaluate(detections, ground_truths)
     aps = average_precisions(positives)
     map = sum(aps.values()) / len(aps.values())
@@ -188,7 +188,7 @@ def one_epoch_train(model, optimizer, images, ground_truths, batch_size, epoch):
 
 def one_epoch_cv(model, optimizer, images, ground_truths):
     n_valid = len(ground_truths)
-    image_tensors  = np.asarray([image.image for image in images]).transpose(0,3,1,2)
+    image_tensors  = np.asarray([image.image for image in images]).transpose(0,3,1,2) / 255.
     ground_truth_tensors = np.asarray([make_ground_truth_tensor(truth) for truth in ground_truths])
 
     loss = 0.
