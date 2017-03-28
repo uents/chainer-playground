@@ -127,8 +127,8 @@ def final_detection(grid_box, real_width, real_height):
               height=grid_box.height * real_height,
               clazz=grid_box.clazz,
               objectness=grid_box.objectness)
-    box.x = max(0., x)
-    box.y = max(0., y)
+    box.x = max(0., box.left)
+    box.y = max(0., box.top)
     box.width = min(box.width, real_width - box.left)
     box.height = min(box.height, real_height - box.top)
     return box
