@@ -15,23 +15,22 @@ class Box():
     def __init__(self, x, y, width, height, clazz=0, objectness=1.0):
         self.left = x
         self.top = y
-        self.right = x + width
-        self.bottom = y + height
+        self.width = width
+        self.height = height
         self.clazz = clazz
         self.objectness = objectness
 
-    @property
-    def width(self):
-        return self.right - self.left
+    def __repr__(self):
+        return "<Box x:%04.1f y:%04.1f w:%04.1f h:%04.1f c:%2d o:%01.3f>" % \
+            (self.left, self.top, self.width, self.height, int(self.clazz), self.objectness)
 
     @property
-    def height(self):
-        return self.bottom - self.top
+    def right(self):
+        return self.left + self.width
 
     @property
-    def vertex(self):
-        return ((self.left, self.top), (self.right-1, self.top),
-                (self.left, self.bottom-1), (self.right-1, self.bottom-1))
+    def bottom(self):
+        return self.top + self.height
 
     def area(self):
         return float(self.width * self.height)
@@ -69,7 +68,7 @@ class Box():
         best_score, best_truth = Box.best_iou(pred_box, truth_boxes)
         if best_score <= 0.5:
             return False
-        elif box.clazz != best_truth.clazz:
+        elif pred_box.clazz != best_truth.clazz:
             return False
         return True
 

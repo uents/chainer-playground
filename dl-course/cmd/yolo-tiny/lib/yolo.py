@@ -150,7 +150,7 @@ class YoloDetector(chainer.Chain):
         conf_learning_scale = np.tile(0.5, tconf.shape)
         conf_learning_scale[tconf == 1.0] = 1.0
         prob_learning_scale = np.tile(0.0, tconf.shape)
-        prob_learning_scale[tconf == 1.0] = 1.0
+        prob_learning_scale[tconf == 1.0] = 2.0
 
         # 損失誤差を算出
         tx = self.__variable(tx, np.float32)
@@ -167,17 +167,15 @@ class YoloDetector(chainer.Chain):
         if self.gpu >=0:
             box_learning_scale.to_gpu(), conf_learning_scale.to_gpu(), prob_learning_scale.to_gpu()
 
-#        print(type(tx), tx.shape, type(px), px.shape)
         x_loss = F.sum(box_learning_scale * ((tx - px) ** 2))
         y_loss = F.sum(box_learning_scale * ((ty - py) ** 2))
         w_loss = F.sum(box_learning_scale * ((tw - pw) ** 2))
         h_loss = F.sum(box_learning_scale * ((th - ph) ** 2))
         conf_loss = F.sum(conf_learning_scale * ((tconf - pconf) ** 2))
         prob_loss = F.sum(prob_learning_scale * F.reshape(F.sum(((tprob - pprob) ** 2), axis=1), prob_learning_scale.shape))
-#        prob_loss = F.sum((tprob - pprob) ** 2)
 
         if self.train:
-            print("loss x:%f y:%f w:%f h:%f conf:%f prob:%f" %
+            print("loss x:%03.4f y:%03.4f w:%03.4f h:%03.4f conf:%03.4f prob:%03.4f" %
                   (x_loss.data, y_loss.data, w_loss.data, h_loss.data, conf_loss.data, prob_loss.data))
         self.loss = x_loss + y_loss + w_loss + h_loss + conf_loss + prob_loss
 
@@ -217,11 +215,14 @@ class YoloDetector(chainer.Chain):
         class_prob_map = pprob * pconf # クラス確率を算出 (N_CLASSES,N_GRID,N_GRID)
         candidate_map = class_prob_map.max(axis=0) > class_prob_thresh # 検出グリッド候補を決定 (N_GRID,N_GRID)
         candidate_label_map = class_prob_map.argmax(axis=0) # 検出グリッド候補のラベルを抽出 (N_GRID,N_GRID)
+        active_grid_cells = [{'x': float(point[1]), 'y': float(point[0])}
+                             for point in np.argwhere(candidate_map == True)]
+
         candidates = []
         for i in range(0, candidate_map.sum()):
             candidates.append(
-                Box(x=px[candidate_map][i],
-                    y=py[candidate_map][i],
+                Box(x=active_grid_cells[i]['x'] + px[candidate_map][i],
+                    y=active_grid_cells[i]['y'] + py[candidate_map][i],
                     width=pw[candidate_map][i],
                     height=ph[candidate_map][i],
                     #'conf': pconf[candidate_map][i],

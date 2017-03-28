@@ -18,6 +18,7 @@ import chainer.links as L
 
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'lib'))
 from yolo import *
+from bounding_box import *
 from image_process import *
 
 # configurations
@@ -81,7 +82,7 @@ def initialize_model(args):
     "ValueError: uninitialized parameters cannot be serialized" を回避するために
     ダミーデータでの順伝播を実行する
     '''
-    dummy_image = Variable(np.zeros((1, 3, INPUT_SIZE, INPUT_SIZE)).astype(np.float32))
+    dummy_image = chainer.Variable(np.zeros((1, 3, INPUT_SIZE, INPUT_SIZE)).astype(np.float32))
     detector_model.forward(dummy_image)
     copy_conv_layer(classifier_model, detector_model)
     chainer.serializers.save_npz(args.output_model_file, detector_model)
@@ -118,8 +119,21 @@ def make_ground_truth_tensor(ground_truth):
                         for box in ground_truth.bounding_boxes]
     return reduce(lambda x, y: x + y, each_tensors)
 
+def final_detection(grid_box, real_width, real_height):
+    grid_size = INPUT_SIZE / N_GRID
+    box = Box(x=grid_box.left * grid_size * real_width / INPUT_SIZE,
+              y=grid_box.top * grid_size * real_height / INPUT_SIZE,
+              width=grid_box.width * real_width,
+              height=grid_box.height * real_height,
+              clazz=grid_box.clazz,
+              objectness=grid_box.objectness)
+    box.width = min(box.width, real_width - box.left)
+    box.height = min(box.height, real_height - box.top)
+    return box
+
 def evaluate(detections, ground_truths):
     positives = {str(i): {'true': 0, 'false': 0}  for i in range(0, N_CLASSES)}
+
     for detection, ground_truth in zip(detections, ground_truths):
         for box in detection:
             if Box.correct(box, ground_truth.bounding_boxes):
@@ -142,7 +156,8 @@ def one_epoch_train(model, optimizer, images, ground_truths, batch_size, epoch):
     image_tensors  = np.asarray([image.image for image in images]).transpose(0,3,1,2)
     ground_truth_tensors = np.asarray([make_ground_truth_tensor(truth) for truth in ground_truths])
 
-    sum_loss, sum_map = (0., 0.)
+    loss = 0.
+    detections = []
     for count in six.moves.range(0, n_train, batch_size):
         ix = perm[count:count+batch_size]
         xs = chainer.Variable(xp.asarray(image_tensors[ix]).astype(np.float32))
@@ -153,32 +168,44 @@ def one_epoch_train(model, optimizer, images, ground_truths, batch_size, epoch):
         if str(iteration) in learning_schedules:
             optimizer.lr = learning_schedules[str(iteration)]
         optimizer.update(model, xs, ts)
-        sum_loss += model.loss.data * len(ix) / n_train
+        loss += model.loss.data * len(ix) / n_train
+        scaled_detections = [[final_detection(box, truth.width, truth.height)
+                              for box in detection]
+                             for detection, truth in zip(model.detections, ground_truths)]
+        detections += scaled_detections
 
-        positives = evaluate(model.detections, ground_truths[ix])
-        avg_precisions = average_precisions(positives)
-        sum_map += sum(avg_precisions.values())/len(avg_precisions.values())
-    return sum_loss, sum_map
+    count = 1
+    for detection, truth in zip(detections, ground_truths):
+        for box in detection:
+            print(count, box, truth.bounding_boxes[0])
+        count += 1
+    
+    positives = evaluate(detections, ground_truths)
+    aps = average_precisions(positives)
+    map = sum(aps.values()) / len(aps.values())
+    return loss, map
 
 def one_epoch_cv(model, optimizer, images, ground_truths):
     n_valid = len(ground_truths)
     image_tensors  = np.asarray([image.image for image in images]).transpose(0,3,1,2)
     ground_truth_tensors = np.asarray([make_ground_truth_tensor(truth) for truth in ground_truths])
 
-    sum_loss, sum_map = (0., 0.)
+    loss = 0.
+    detections = []
     for count in six.moves.range(0, n_valid, 10):
         ix = np.arange(count, min(count+10, n_valid))
         xs = chainer.Variable(xp.asarray(image_tensors[ix]).astype(np.float32))
         ts = chainer.Variable(xp.asarray(ground_truth_tensors[ix]).astype(np.float32))
 
         model.train = False
-        detections = model(xs, ts)
-        sum_loss += model.loss.data * len(ix) / n_valid
+        model(xs, ts)
+        loss += model.loss.data * len(ix) / n_valid
+        detections += model.detections
 
-        positives = evaluate(model.detections, ground_truths[ix])
-        avg_precisions = average_precisions(positives)
-        sum_map += sum(avg_precisions.values())/len(avg_precisions.values())
-    return sum_loss, sum_map
+    positives = evaluate(detections, ground_truths)
+    aps = average_precisions(positives)
+    map = sum(aps.values()) / len(aps.values())
+    return loss, map
 
 def train_model(args):
     print('train model: gpu:%d epoch:%d batch_size:%d init_model:%s init_state:%s' % \

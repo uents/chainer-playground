@@ -51,7 +51,7 @@ def one_epoch_train(model, optimizer, images, labels, batch_size):
     n_train = len(labels)
     perm = np.random.permutation(n_train)
 
-    sum_loss, sum_acc = (0., 0.)
+    loss, acc = (0., 0.)
     for count in six.moves.range(0, n_train, batch_size):
         ix = perm[count:count+batch_size]
         xs = chainer.Variable(xp.asarray(images[ix]).astype(np.float32).transpose(0,3,1,2))
@@ -60,14 +60,14 @@ def one_epoch_train(model, optimizer, images, labels, batch_size):
         model.train = True
         optimizer.update(model, xs, ts)
         print('mini-batch:%d loss:%f acc:%f' % ((count/batch_size)+1, model.loss.data, model.accuracy.data))
-        sum_loss += model.loss.data * len(ix) / n_train
-        sum_acc += model.accuracy.data * len(ix) / n_train
-    return sum_loss, sum_acc
+        loss += model.loss.data * len(ix) / n_train
+        acc += model.accuracy.data * len(ix) / n_train
+    return loss, acc
 
 def one_epoch_cv(model, optimizer, images, labels):
     n_valid = len(labels)
 
-    sum_loss, sum_acc = (0., 0.)
+    loss, acc = (0., 0.)
     for count in six.moves.range(0, n_valid, 10):
         ix = np.arange(count, min(count+10, n_valid))
         xs = chainer.Variable(xp.asarray(images[ix]).astype(np.float32).transpose(0,3,1,2))
@@ -75,9 +75,9 @@ def one_epoch_cv(model, optimizer, images, labels):
 
         model.train = False
         model(xs, ts)
-        sum_loss += model.loss.data * len(ix) / n_valid
-        sum_acc += model.accuracy.data * len(ix) / n_valid
-    return sum_loss, sum_acc
+        loss += model.loss.data * len(ix) / n_valid
+        acc += model.accuracy.data * len(ix) / n_valid
+    return loss, acc
 
 def train_model(args):
     print('train model: gpu:%d epoch:%d batch_size:%d init_model:%s init_state:%s' % \
