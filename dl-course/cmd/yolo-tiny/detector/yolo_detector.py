@@ -24,9 +24,9 @@ from image_process import *
 # configurations
 learning_schedules = {
     '0'    : 1e-5,
-    '500'  : 1e-4,
-    '10000': 1e-5,
-    '20000': 1e-6
+    '500'  : 1e-4, 
+    '10000': 1e-4, # 1e-5
+    '20000': 1e-5  # 1e-6
 }
 momentum = 0.9
 weight_decay = 0.005
@@ -88,11 +88,11 @@ def initialize_model(args):
     chainer.serializers.save_npz(args.output_model_file, detector_model)
 
 
-def parse_ground_truth(bounding_box, real_width, real_height):
-    tw = bounding_box.width * INPUT_SIZE / real_width
-    th = bounding_box.height * INPUT_SIZE / real_height
-    tx = (bounding_box.left * INPUT_SIZE / real_width) + (tw / 2)
-    ty = (bounding_box.top * INPUT_SIZE / real_height) + (th / 2)
+def parse_ground_truth(box, real_width, real_height):
+    tx = (box.left + (box.width / 2.0)) * INPUT_SIZE / real_width
+    ty = (box.top  + (box.height / 2.0)) * INPUT_SIZE / real_height
+    tw = box.width * INPUT_SIZE / real_width
+    th = box.height * INPUT_SIZE / real_height
 
     grid_size = INPUT_SIZE / N_GRID
     active_grid_cell = {
@@ -105,7 +105,7 @@ def parse_ground_truth(bounding_box, real_width, real_height):
         'w' : tw / INPUT_SIZE,
         'h' : th / INPUT_SIZE
     }
-    one_hot_clazz = np.eye(N_CLASSES)[np.array(bounding_box.clazz)]
+    one_hot_clazz = np.eye(N_CLASSES)[np.array(box.clazz)]
 
     # detection layerのテンソルに変換
     tensor = np.zeros(((5*N_BOXES)+N_CLASSES, N_GRID, N_GRID)).astype(np.float32)
@@ -121,12 +121,14 @@ def make_ground_truth_tensor(ground_truth):
 
 def final_detection(grid_box, real_width, real_height):
     grid_size = INPUT_SIZE / N_GRID
-    box = Box(x=grid_box.left * grid_size * real_width / INPUT_SIZE,
-              y=grid_box.top * grid_size * real_height / INPUT_SIZE,
+    box = Box(x=((grid_box.left * grid_size * real_width / INPUT_SIZE) - (grid_box.width * real_width / 2)),
+              y=((grid_box.top * grid_size * real_height / INPUT_SIZE) - (grid_box.height * real_height / 2)),
               width=grid_box.width * real_width,
               height=grid_box.height * real_height,
               clazz=grid_box.clazz,
               objectness=grid_box.objectness)
+    box.x = max(0., x)
+    box.y = max(0., y)
     box.width = min(box.width, real_width - box.left)
     box.height = min(box.height, real_height - box.top)
     return box
@@ -152,14 +154,13 @@ def average_precisions(positives):
 
 def one_epoch_train(model, optimizer, images, ground_truths, batch_size, epoch):
     n_train = len(ground_truths)
-    perm = np.random.permutation(n_train)
     image_tensors  = np.asarray([image.image for image in images]).transpose(0,3,1,2)
     ground_truth_tensors = np.asarray([make_ground_truth_tensor(truth) for truth in ground_truths])
 
     loss = 0.
     detections = []
     for count in six.moves.range(0, n_train, batch_size):
-        ix = perm[count:count+batch_size]
+        ix = np.arange(count, min(count+batch_size, n_train))
         xs = chainer.Variable(xp.asarray(image_tensors[ix]).astype(np.float32))
         ts = chainer.Variable(xp.asarray(ground_truth_tensors[ix]).astype(np.float32))
 

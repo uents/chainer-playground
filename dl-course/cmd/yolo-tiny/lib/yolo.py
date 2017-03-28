@@ -136,7 +136,7 @@ class YoloDetector(chainer.Chain):
 #        tx, ty, tw, th, tconf, tprob = F.split_axis(t, indices_or_sections=(1,2,3,4,5), axis=1)
         if self.gpu >= 0: t.to_gpu()
 
-        # オブジェクトが存在しないグリッドは、活性化後にグリッド中心となるよう学習
+        # オブジェクトが存在しないグリッドは、グリッド中心とする
         tx[tconf != 1.0] = 0.5
         ty[tconf != 1.0] = 0.5
         # オブジェクトが存在しないグリッドは、学習させない
@@ -150,7 +150,7 @@ class YoloDetector(chainer.Chain):
         conf_learning_scale = np.tile(0.5, tconf.shape)
         conf_learning_scale[tconf == 1.0] = 1.0
         prob_learning_scale = np.tile(0.0, tconf.shape)
-        prob_learning_scale[tconf == 1.0] = 2.0
+        prob_learning_scale[tconf == 1.0] = 1.0
 
         # 損失誤差を算出
         tx = self.__variable(tx, np.float32)
@@ -216,7 +216,7 @@ class YoloDetector(chainer.Chain):
         candidate_map = class_prob_map.max(axis=0) > class_prob_thresh # 検出グリッド候補を決定 (N_GRID,N_GRID)
         candidate_label_map = class_prob_map.argmax(axis=0) # 検出グリッド候補のラベルを抽出 (N_GRID,N_GRID)
         active_grid_cells = [{'x': float(point[1]), 'y': float(point[0])}
-                             for point in np.argwhere(candidate_map == True)]
+                             for point in np.argwhere(candidate_map)]
 
         candidates = []
         for i in range(0, candidate_map.sum()):
@@ -233,7 +233,7 @@ class YoloDetector(chainer.Chain):
         return candidates
 
     def __nms(self, candidates, iou_thresh):
-        sorted(candidates, key=lambda x: x.objectness, reverse=True)
+        sorted(candidates, key=lambda box: box.objectness, reverse=True)
         winners = []
 
         if len(candidates) == 0:
