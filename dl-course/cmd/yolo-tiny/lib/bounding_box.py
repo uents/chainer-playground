@@ -66,8 +66,8 @@ class Box():
     @classmethod
     def correct(self, pred_box, truth_boxes):
         best_score, best_truth = Box.best_iou(pred_box, truth_boxes)
-#        if best_score <= 0.5:
-#            return False
+        if best_score <= 0.5:
+            return False
         if pred_box.clazz != best_truth.clazz:
             return False
         return True

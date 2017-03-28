@@ -25,8 +25,8 @@ from image_process import *
 learning_schedules = {
     '0'    : 1e-5,
     '500'  : 1e-4, 
-    '10000': 1e-4, # 1e-5
-    '20000': 1e-5  # 1e-6
+    '10000': 1e-5,
+    '20000': 1e-6 
 }
 momentum = 0.9
 weight_decay = 0.005
@@ -201,7 +201,16 @@ def one_epoch_cv(model, optimizer, images, ground_truths):
         model.train = False
         model(xs, ts)
         loss += model.loss.data * len(ix) / n_valid
-        detections += model.detections
+        scaled_detections = [[final_detection(box, truth.width, truth.height)
+                              for box in detection]
+                             for detection, truth in zip(model.detections, ground_truths)]
+        detections += scaled_detections
+
+    count = 1
+    for detection, truth in zip(detections, ground_truths):
+        for box in detection:
+            print(count, box, truth.bounding_boxes[0])
+        count += 1
 
     positives = evaluate(detections, ground_truths)
     aps = average_precisions(positives)
