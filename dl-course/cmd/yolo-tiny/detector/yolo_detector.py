@@ -82,7 +82,7 @@ def initialize_model(args):
     "ValueError: uninitialized parameters cannot be serialized" を回避するために
     ダミーデータでの順伝播を実行する
     '''
-    dummy_image = chainer.Variable(np.zeros((1, 3, INPUT_SIZE, INPUT_SIZE)).astype(np.float32))
+    dummy_image = chainer.Variable(np.random.rand(1, 3, INPUT_SIZE, INPUT_SIZE).astype(np.float32))
     detector_model.forward(dummy_image)
     copy_conv_layer(classifier_model, detector_model)
     chainer.serializers.save_npz(args.output_model_file, detector_model)
