@@ -25,14 +25,20 @@ DATASET_PATH = os.path.join('.', 'classifier_dataset.npz')
 
 
 def parse_item_of_dataset(item):
+    sys.stdout.write('\rload %s' % (item['color_image_path']))
     image = Image(item['color_image_path'], INPUT_SIZE, INPUT_SIZE).image
     label = [int(clazz) for clazz in item['classes']]
     return {'image': image, 'label': label}
 
 def load_dataset(catalog_file):
-    with open(os.path.join(catalog_file), 'r') as fp:
-        catalog = json.load(fp)
+    try:
+        with open(os.path.join(catalog_file), 'r') as fp:
+            catalog = json.load(fp)
+    except IOError:
+        return np.asarray([]), np.asarray([])
+
     items = [parse_item_of_dataset(item) for item in catalog['dataset']]
+    print('\n')
     images = np.asarray([item['image'] for item in items])
     labels = np.asarray([item['label'] for item in items])
     return images, labels
@@ -116,11 +122,11 @@ def train_model(args):
             chainer.serializers.save_npz('classifier_epoch{}.model'.format(epoch), model)
             chainer.serializers.save_npz('classifier_epoch{}.state'.format(epoch), optimizer)
 
-    chainer.serializers.save_npz('classifier_final.model', model)
-    chainer.serializers.save_npz('classifier_final.state', optimizer)
     with open('classifier_train_log.json', 'w') as fp:
         json.dump({'epoch': str(args.n_epoch), 'batch_size': str(args.batch_size), 'logs': logs},
             fp, sort_keys=True, ensure_ascii=False, indent=2)
+    chainer.serializers.save_npz('classifier_final.model', model)
+    chainer.serializers.save_npz('classifier_final.state', optimizer)
 
 def parse_arguments():
     usage = 'make training dataset catalog (sample code)'

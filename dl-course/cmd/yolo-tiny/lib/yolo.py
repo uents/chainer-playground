@@ -91,9 +91,9 @@ class YoloDetector(chainer.Chain):
             conv8 = L.Convolution2D(None, 1024, ksize=3, stride=1, pad=1),
             conv9 = L.Convolution2D(None, 1024, ksize=3, stride=1, pad=1),
 #            fc1 = L.Linear(50176, 256), # (1024,7,7)=50176
-#            fc2 = L.Linear(None, 4096),
             fc1 = L.Linear(50176, 4096), # (1024,7,7)=50176
-            fc2 = L.Linear(None, ((N_BOXES*5)+N_CLASSES) * (N_GRID**2))
+#            fc2 = L.Linear(None, 4096),
+            fc3 = L.Linear(None, ((N_BOXES*5)+N_CLASSES) * (N_GRID**2))
         )
         self.train = False
         self.class_prob_thresh = 0.3
@@ -121,7 +121,8 @@ class YoloDetector(chainer.Chain):
         h = F.leaky_relu(self.fc1(h), slope=0.1)
         h = F.dropout(h, train=self.train, ratio=0.5)
 #        h = F.leaky_relu(self.fc2(h), slope=0.1)
-        h = self.fc2(h) # (batch_size, ((5*N_BOXES)+N_CLASSES)*N_GRID*N_GRID)
+#        h = F.dropout(h, train=self.train, ratio=0.5)
+        h = self.fc3(h) # (batch_size, ((5*N_BOXES)+N_CLASSES)*N_GRID*N_GRID)
 
         # extract result tensors
         h = F.reshape(h, (batch_size, (5*N_BOXES)+N_CLASSES, N_GRID, N_GRID))

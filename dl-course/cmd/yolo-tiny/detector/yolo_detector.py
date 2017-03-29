@@ -36,6 +36,7 @@ FIRST_MODEL_PATH = os.path.join('.', 'detector_first.model')
 
 
 def parse_item_of_dataset(item):
+    sys.stdout.write('\rload %s' % (item['color_image_path']))
     image = Image(item['color_image_path'], INPUT_SIZE, INPUT_SIZE)
     bounding_boxes = [Box(x=float(box['x']), y=float(box['y']),
                             width=float(box['width']), height=float(box['height']),
@@ -45,10 +46,15 @@ def parse_item_of_dataset(item):
     return {'image': image, 'ground_truth': ground_truth}
 
 def load_dataset(catalog_file):
-    with open(os.path.join(catalog_file), 'r') as fp:
-        catalog = json.load(fp)
+    try:
+        with open(os.path.join(catalog_file), 'r') as fp:
+            catalog = json.load(fp)
+    except IOError:
+        return np.asarray([]), np.asarray([])
+
     dataset = filter(lambda item: item['bounding_boxes'] != [], catalog['dataset'])
     items = [parse_item_of_dataset(item) for item in dataset]
+    print('\n')
     images = np.asarray([item['image'] for item in items])
     ground_truths = np.asarray([item['ground_truth'] for item in items])
     return images, ground_truths
@@ -253,15 +259,15 @@ def train_model(args):
             'train_loss': str(train_loss), 'train_map': str(train_map),
             'cv_loss': str(cv_loss), 'cv_map': str(cv_map)
         })
-        if (epoch % 10) == 0:
-            chainer.serializers.save_npz('detector_epoch{}.model'.format(epoch), model)
-            chainer.serializers.save_npz('detector_epoch{}.state'.format(epoch), optimizer)
+#        if (epoch % 10) == 0:
+#            chainer.serializers.save_npz('detector_epoch{}.model'.format(epoch), model)
+#            chainer.serializers.save_npz('detector_epoch{}.state'.format(epoch), optimizer)
 
-    chainer.serializers.save_npz('detector_final.model', model)
-    chainer.serializers.save_npz('detector_final.state', optimizer)
     with open('detector_train_log.json', 'w') as fp:
         json.dump({'epoch': str(args.n_epoch), 'batch_size': str(args.batch_size), 'logs': logs},
             fp, sort_keys=True, ensure_ascii=False, indent=2)
+    chainer.serializers.save_npz('detector_final.model', model)
+    chainer.serializers.save_npz('detector_final.state', optimizer)
 
 
 def parse_arguments():
