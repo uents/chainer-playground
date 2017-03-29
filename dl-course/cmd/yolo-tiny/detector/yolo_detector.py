@@ -154,14 +154,14 @@ def average_precisions(positives):
 
 def one_epoch_train(model, optimizer, images, ground_truths, batch_size, epoch):
     n_train = len(ground_truths)
-    image_tensors  = np.asarray([image.image for image in images]).transpose(0,3,1,2) / 255.
+    image_tensors  = np.asarray([image.image for image in images])
     ground_truth_tensors = np.asarray([make_ground_truth_tensor(truth) for truth in ground_truths])
 
     loss = 0.
     detections = []
     for count in six.moves.range(0, n_train, batch_size):
         ix = np.arange(count, min(count+batch_size, n_train))
-        xs = chainer.Variable(xp.asarray(image_tensors[ix]).astype(np.float32))
+        xs = chainer.Variable(xp.asarray(image_tensors[ix]).transpose(0,3,1,2).astype(np.float32) / 255.)
         ts = chainer.Variable(xp.asarray(ground_truth_tensors[ix]).astype(np.float32))
 
         model.train = True
@@ -188,14 +188,14 @@ def one_epoch_train(model, optimizer, images, ground_truths, batch_size, epoch):
 
 def one_epoch_cv(model, optimizer, images, ground_truths):
     n_valid = len(ground_truths)
-    image_tensors  = np.asarray([image.image for image in images]).transpose(0,3,1,2) / 255.
+    image_tensors  = np.asarray([image.image for image in images])
     ground_truth_tensors = np.asarray([make_ground_truth_tensor(truth) for truth in ground_truths])
 
     loss = 0.
     detections = []
     for count in six.moves.range(0, n_valid, 10):
         ix = np.arange(count, min(count+10, n_valid))
-        xs = chainer.Variable(xp.asarray(image_tensors[ix]).astype(np.float32))
+        xs = chainer.Variable(xp.asarray(image_tensors[ix]).transpose(0,3,1,2).astype(np.float32) / 255.)
         ts = chainer.Variable(xp.asarray(ground_truth_tensors[ix]).astype(np.float32))
 
         model.train = False
