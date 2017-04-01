@@ -12,18 +12,10 @@ import chainer.functions as F
 import chainer.links as L
 
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'lib'))
+from config import *
 from bounding_box import *
 
-# configurations
 xp = np
-N_BOXES = 1
-N_CLASSES = 26  # 0..25
-                # F.softmax_cross_entropy()で扱うラベルが
-                # 0始まりの必要があるため、便宜的に0を追加
-N_GRID = 7
-INPUT_SIZE = 448
-N_CNN_LAYER = 7
-
 
 '''
 YOLO(YOLO Tiny)については、Darknetの以下のリンク先を参考に実装。Tiny YOLOとは異なるので注意
@@ -43,9 +35,12 @@ class YoloClassifier(chainer.Chain):
             # addditonal layers for pretraining
             conv8  = L.Convolution2D(None, N_CLASSES, ksize=1, stride=1, pad=0),
         )
+        self.gpu = -1
+        if gpu >= 0:
+            self.gpu = gpu
+            self.to_gpu()
+            xp = chainer.cuda.cupy
         self.train = False
-        self.gpu = gpu
-        if self.gpu >= 0: self.to_gpu()
 
     def forward(self, x):
         batch_size = x.data.shape[0]
@@ -95,11 +90,14 @@ class YoloDetector(chainer.Chain):
 #            fc2 = L.Linear(None, 4096),
             fc3 = L.Linear(None, ((N_BOXES*5)+N_CLASSES) * (N_GRID**2))
         )
-        self.train = False
         self.class_prob_thresh = 0.3
         self.iou_thresh = 0.3
-        self.gpu = gpu
-        if self.gpu >= 0: self.to_gpu()
+        self.gpu = -1
+        if gpu >= 0:
+            self.gpu = gpu
+            self.to_gpu()
+            xp = chainer.cuda.cupy
+        self.train = False
 
     def forward(self, x):
         batch_size = x.data.shape[0]
@@ -123,15 +121,16 @@ class YoloDetector(chainer.Chain):
 #        h = F.leaky_relu(self.fc2(h), slope=0.1)
 #        h = F.dropout(h, train=self.train, ratio=0.5)
         h = self.fc3(h) # (batch_size, ((5*N_BOXES)+N_CLASSES)*N_GRID*N_GRID)
-
-        # extract result tensors
+        # reshape predicted tensors
         h = F.reshape(h, (batch_size, (5*N_BOXES)+N_CLASSES, N_GRID, N_GRID))
-        x, y, w, h, conf, prob = F.split_axis(h, indices_or_sections=(1,2,3,4,5), axis=1)
-        return F.sigmoid(x), F.sigmoid(y), F.sigmoid(w), F.sigmoid(h), F.sigmoid(conf), F.sigmoid(prob)
+        return F.sigmoid(h)
+#        x, y, w, h, conf, prob = F.split_axis(h, indices_or_sections=(1,2,3,4,5), axis=1)
+#        return F.sigmoid(x), F.sigmoid(y), F.sigmoid(w), F.sigmoid(h), F.sigmoid(conf), F.sigmoid(prob)
 
     def __call__(self, x, t):
         # 推論を実行
-        px, py, pw, ph, pconf, pprob = self.forward(x)
+        h = self.forward(x)
+        px, py, pw, ph, pconf, pprob = F.split_axis(h, indices_or_sections=(1,2,3,4,5), axis=1)
         # 教師データを抽出
         if self.gpu >= 0: t.to_cpu()
         tx, ty, tw, th, tconf, _tprob = np.array_split(t.data, indices_or_sections=(1,2,3,4,5), axis=1)
@@ -181,74 +180,19 @@ class YoloDetector(chainer.Chain):
                   (x_loss.data, y_loss.data, w_loss.data, h_loss.data, conf_loss.data, prob_loss.data))
         self.loss = x_loss + y_loss + w_loss + h_loss + conf_loss + prob_loss
 
+        '''
         if self.gpu >= 0:
             px.to_cpu(), py.to_cpu(), pw.to_cpu(), ph.to_cpu(), pconf.to_cpu(), pprob.to_cpu()
         self.detections = self.__detection(px, py, pw, ph, pconf, pprob)
         if self.gpu >= 0:
             px.to_gpu(), py.to_gpu(), pw.to_gpu(), ph.to_gpu(), pconf.to_gpu(), pprob.to_gpu()
+        '''
 
+        self.h = chainer.cuda.to_cpu(h.data.copy())
         if self.train:
             return self.loss
         else:
-            return self.detections
-
-    def inference(self, x):
-        px, py, pw, ph, pconf, pprob = self.forward(x)
-        return self.__detection(px, py, pw, ph, pconf, pprob)
-
-    def __detection(self, px, py, pw, ph, pconf, pprob):
-        batch_size = px.data.shape[0]
-        _px = F.reshape(px, (batch_size, N_GRID, N_GRID)).data
-        _py = F.reshape(py, (batch_size, N_GRID, N_GRID)).data
-        _pw = F.reshape(pw, (batch_size, N_GRID, N_GRID)).data
-        _ph = F.reshape(ph, (batch_size, N_GRID, N_GRID)).data
-        _pconf = F.reshape(pconf, (batch_size, N_GRID, N_GRID)).data
-        _pprob = pprob.data
-
-        detections = []
-        for i in range(0, batch_size):
-            candidates = self.__select_candidates(
-                _px[i], _py[i], _pw[i], _ph[i], _pconf[i], _pprob[i], self.class_prob_thresh)
-            winners = self.__nms(candidates, self.iou_thresh)
-            detections.append(winners)
-        return detections
-
-    def __select_candidates(self, px, py, pw, ph, pconf, pprob, class_prob_thresh):
-        class_prob_map = pprob * pconf # クラス確率を算出 (N_CLASSES,N_GRID,N_GRID)
-        candidate_map = class_prob_map.max(axis=0) > class_prob_thresh # 検出グリッド候補を決定 (N_GRID,N_GRID)
-        candidate_label_map = class_prob_map.argmax(axis=0) # 検出グリッド候補のラベルを抽出 (N_GRID,N_GRID)
-        active_grid_cells = [{'x': float(point[1]), 'y': float(point[0])}
-                             for point in np.argwhere(candidate_map)]
-
-        candidates = []
-        for i in range(0, candidate_map.sum()):
-            candidates.append(
-                Box(x=active_grid_cells[i]['x'] + px[candidate_map][i],
-                    y=active_grid_cells[i]['y'] + py[candidate_map][i],
-                    width=pw[candidate_map][i],
-                    height=ph[candidate_map][i],
-                    #'conf': pconf[candidate_map][i],
-                    #'prob': pprob.transpose(1,2,0)[candidate_map][i],
-                    clazz=candidate_label_map[candidate_map][i],
-                    objectness=class_prob_map.max(axis=0)[candidate_map][i]
-                ))
-        return candidates
-
-    def __nms(self, candidates, iou_thresh):
-        sorted(candidates, key=lambda box: box.objectness, reverse=True)
-        winners = []
-
-        if len(candidates) == 0:
-            return winners
-
-        winners.append(candidates[0]) # 第１候補は必ず採用
-        for i in range(1, len(candidates)): # 第２候補以降は上位の候補とのIOU次第
-            for j in range(0, i):
-                if Box.iou(candidates[i], candidates[j]) > iou_thresh:
-                    break
-            else:
-                winners.append(candidates[i])
-        return winners
+            return self.h
 
     def __variable(self, v, t):
         return chainer.Variable(xp.asarray(v).astype(t))
