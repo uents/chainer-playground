@@ -184,7 +184,7 @@ def select_candidates(tensor):
     return candidates
 
 # non-maximal supression
-def nms(candidates, iou_thresh):
+def nms(candidates):
     if len(candidates) == 0:
         return []
 
@@ -196,7 +196,7 @@ def nms(candidates, iou_thresh):
     # TODO: 比較すべきは勝ち残ったBoxかも？
     for i, box1 in enumerate(candidates[1:], 1):
         for box2 in candidates[:i]:
-            if Box.iou(box1, box2) > iou_thresh:
+            if Box.iou(box1, box2) > IOU_THRESH:
                 break
         else:
             winners.append(box1)

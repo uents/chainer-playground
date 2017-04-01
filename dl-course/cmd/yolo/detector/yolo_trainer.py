@@ -72,7 +72,7 @@ def boxes_to_tensor(boxes):
     return reduce(lambda x, y: x + y, each_tensor)
 
 def tensor_to_boxes(tensors):
-    return nms(select_candidates(tensors), IOU_THRESH)
+    return nms(select_candidates(tensors))
 
 def init_positives():
     return [{'true': 0, 'false': 0}  for i in range(0, N_CLASSES)]
