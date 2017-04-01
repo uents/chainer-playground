@@ -105,8 +105,8 @@ def yolo_to_grid_coord(box):
 # 矩形の始点は矩形左上
 def grid_to_yolo_coord(box, grid_cell):
     grid_size = INPUT_SIZE / N_GRID
-    x = (grid_cell.left + box.left) * grid_size
-    y = (grid_cell.top + box.top) * grid_size
+    x = (grid_cell.x + box.left) * grid_size
+    y = (grid_cell.y + box.top) * grid_size
     w = box.width * grid_size
     h = box.height * grid_size
     return Box(x=x, y=y, width=w, height=h,
@@ -160,7 +160,12 @@ def decode_box_tensor(px, py, pw, ph, pobj, grid_cell):
 # 検出候補のBounding Boxを選定
 def select_candidates(tensor):
     px, py, pw, ph, pconf, pprob \
-        = np.array_split(tensor, indices_or_sections=(1,2,3,4,5), axis=1)
+        = np.array_split(tensor, indices_or_sections=(1,2,3,4,5), axis=0)
+    px = px.reshape(px.shape[1:])
+    py = py.reshape(py.shape[1:])
+    pw = pw.reshape(pw.shape[1:])
+    ph = ph.reshape(ph.shape[1:])
+    pconf = pconf.reshape(pconf.shape[1:])
 
     # グリッド毎のクラス確率を算出 (N_CLASSES, N_GRID, N_GRID)
     class_prob_map = pprob * pconf

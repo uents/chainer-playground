@@ -86,7 +86,8 @@ class YoloDetector(chainer.Chain):
             conv8 = L.Convolution2D(None, 1024, ksize=3, stride=1, pad=1),
             conv9 = L.Convolution2D(None, 1024, ksize=3, stride=1, pad=1),
 #            fc1 = L.Linear(50176, 256), # (1024,7,7)=50176
-            fc1 = L.Linear(50176, 4096), # (1024,7,7)=50176
+            fc1 = L.Linear(50176, 2048), # (1024,7,7)=50176
+#            fc1 = L.Linear(50176, 4096), # (1024,7,7)=50176
 #            fc2 = L.Linear(None, 4096),
             fc3 = L.Linear(None, ((N_BOXES*5)+N_CLASSES) * (N_GRID**2))
         )
@@ -117,20 +118,33 @@ class YoloDetector(chainer.Chain):
         h = F.leaky_relu(self.conv8(h), slope=0.1)
         h = F.leaky_relu(self.conv9(h), slope=0.1)
         h = F.leaky_relu(self.fc1(h), slope=0.1)
-        h = F.dropout(h, train=self.train, ratio=0.5)
 #        h = F.leaky_relu(self.fc2(h), slope=0.1)
-#        h = F.dropout(h, train=self.train, ratio=0.5)
-        h = self.fc3(h) # (batch_size, ((5*N_BOXES)+N_CLASSES)*N_GRID*N_GRID)
+        h = F.dropout(h, train=self.train, ratio=0.5)
+        h = self.fc3(h)
         # reshape predicted tensors
         h = F.reshape(h, (batch_size, (5*N_BOXES)+N_CLASSES, N_GRID, N_GRID))
-        return F.sigmoid(h)
+        return h
 #        x, y, w, h, conf, prob = F.split_axis(h, indices_or_sections=(1,2,3,4,5), axis=1)
 #        return F.sigmoid(x), F.sigmoid(y), F.sigmoid(w), F.sigmoid(h), F.sigmoid(conf), F.sigmoid(prob)
+
+    '''
+    def __call__(self, x, t):
+        h = self.forward(x)
+        self.h = h.data
+        self.loss = chainer.Variable(xp.asarray([10.]).astype(np.float32))
+        return self.loss
+    '''
 
     def __call__(self, x, t):
         # 推論を実行
         h = self.forward(x)
         px, py, pw, ph, pconf, pprob = F.split_axis(h, indices_or_sections=(1,2,3,4,5), axis=1)
+        px = F.sigmoid(px)
+        py = F.sigmoid(py)
+        pw = F.sigmoid(pw)
+        ph = F.sigmoid(ph)
+        pconf = F.sigmoid(pconf)
+        pprob = F.sigmoid(pprob)
         # 教師データを抽出
         if self.gpu >= 0: t.to_cpu()
         tx, ty, tw, th, tconf, _tprob = np.array_split(t.data, indices_or_sections=(1,2,3,4,5), axis=1)
@@ -188,7 +202,7 @@ class YoloDetector(chainer.Chain):
             px.to_gpu(), py.to_gpu(), pw.to_gpu(), ph.to_gpu(), pconf.to_gpu(), pprob.to_gpu()
         '''
 
-        self.h = chainer.cuda.to_cpu(h.data.copy())
+        self.h = chainer.cuda.to_cpu(h.data)
         if self.train:
             return self.loss
         else:
