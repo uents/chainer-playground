@@ -78,9 +78,7 @@ def init_positives():
     return [{'true': 0, 'false': 0}  for i in range(0, N_CLASSES)]
 
 def count_positives(predicted_boxes, truth_boxes):
-#    print(predictions)
     positives = init_positives()
-#    for pred_boxes, truth_boxes in zip(predictions, truths):
     for pred_box in predicted_boxes:
         if Box.correct(pred_box, truth_boxes):
             positives[int(pred_box.clazz)]['true'] += 1
@@ -91,7 +89,7 @@ def count_positives(predicted_boxes, truth_boxes):
 def add_positives(pos1, pos2):
     def add_item(item1, item2):
         return {'true': item1['true'] + item2['true'],
-                'false': item2['false'] + item2['false']}
+                'false': item1['false'] + item2['false']}
     return [add_item(item1, item2) for item1, item2 in zip(pos1, pos2)]
 
 def average_precisions(positives):
@@ -102,15 +100,19 @@ def average_precisions(positives):
     return [precision(p['true'], p['false']) for p in positives]
 
 def mean_average_precision(positives):
-    return np.asarray(average_precisions(positives)).mean()
+    print('precision:{}'.format(positives))
+    aps = average_precisions(positives)
+    return np.asarray(aps).mean()
 
 def one_epoch_train(model, optimizer, image_paths, ground_truth_boxes, batch_size, epoch):
     n_train = len(ground_truth_boxes)
+    perm = np.random.permutation(n_train)
 
     loss = 0.
     positives = init_positives()
     for count in six.moves.range(0, n_train, batch_size):
-        ix = np.arange(count, min(count+batch_size, n_train))
+#        ix = np.arange(count, min(count+batch_size, n_train))
+        ix = perm[count:count+batch_size]
         images, truth_boxes = load_dataset(image_paths[ix], ground_truth_boxes[ix])
         truth_tensors = np.asarray([boxes_to_tensor(boxes) for boxes in truth_boxes])
 
@@ -130,11 +132,9 @@ def one_epoch_train(model, optimizer, image_paths, ground_truth_boxes, batch_siz
             predicted_boxes = tensor_to_boxes(model.h[batch])
             positives = add_positives(
                 positives, count_positives(predicted_boxes, truth_boxes[batch]))
-#            for i, (preds, truths) in enumerate(zip(predicted_boxes, truth_boxes[batch]), 1):
-#            i = 1
 #            for pred_box, truth_box in itertools.product(predicted_boxes, truth_boxes[batch]):
-#                print('{} pred:{} truth:{}'.format(i, pred_box, truth_box))
-#                i += 1
+#                print('{} {} pred:{} truth:{}'.format(
+#                    count + batch + 1, Box.correct(pred_box, truth_box), pred_box, truth_box))
 
     return loss, mean_average_precision(positives)
 
@@ -159,11 +159,9 @@ def one_epoch_cv(model, optimizer, image_paths, ground_truth_boxes):
             predicted_boxes = tensor_to_boxes(model.h[batch])
             positives = add_positives(
                 positives, count_positives(predicted_boxes, truth_boxes[batch]))
-#            for i, (preds, truths) in enumerate(zip(predicted_boxes, truth_boxes[batch]), 1):
-#            i = 1
-#            for pred_box, truth_box in itertools.product(predicted_boxes, truth_boxes[batch]):
-#                print('{} pred:{} truth:{}'.format(i, pred_box, truth_box))
-#                i += 1
+            for pred_box, truth_box in itertools.product(predicted_boxes, truth_boxes[batch]):
+                print('{} {} pred:{} truth:{}'.format(
+                    count + batch + 1, Box.correct(pred_box, [truth_box]), pred_box, truth_box))
 
     return loss, mean_average_precision(positives)
 

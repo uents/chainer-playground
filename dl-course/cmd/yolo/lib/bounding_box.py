@@ -28,7 +28,7 @@ class Box():
         self.objectness = objectness
 
     def __repr__(self):
-        return '<Box x:%04.1f y:%04.1f w:%04.1f h:%04.1f c:%2d o:%01.3f>' % \
+        return '<Box x:%4.1f y:%4.1f w:%4.1f h:%4.1f c:%2d o:%1.3f>' % \
             (self.left, self.top, self.width, self.height, int(self.clazz), self.objectness)
 
     @property
@@ -96,8 +96,8 @@ def yolo_to_grid_coord(box):
     grid_size = INPUT_SIZE / N_GRID
     x = (box.left + (box.width / 2.)) / grid_size
     y = (box.top + (box.height / 2.)) / grid_size
-    w = box.width / grid_size
-    h = box.height / grid_size
+    w = box.width / INPUT_SIZE
+    h = box.height / INPUT_SIZE
     return Box(x=x, y=y, width=w, height=h,
                 clazz=box.clazz, objectness=box.objectness)
 
@@ -105,10 +105,12 @@ def yolo_to_grid_coord(box):
 # 矩形の始点は矩形左上
 def grid_to_yolo_coord(box, grid_cell):
     grid_size = INPUT_SIZE / N_GRID
-    x = (grid_cell.x + box.left) * grid_size
-    y = (grid_cell.y + box.top) * grid_size
-    w = box.width * grid_size
-    h = box.height * grid_size
+    w = box.width * INPUT_SIZE
+    h = box.height * INPUT_SIZE
+    x = max(((grid_cell.x + box.left) * grid_size) - w / 2., 0.)
+    y = max(((grid_cell.y + box.top) * grid_size) - h / 2., 0.)
+    w = min(w, INPUT_SIZE - x)
+    h = min(h, INPUT_SIZE - y)
     return Box(x=x, y=y, width=w, height=h,
                 clazz=box.clazz, objectness=box.objectness)
 
@@ -132,8 +134,10 @@ def encode_box_tensor(yolo_box):
     norm_box = Box(
         x=math.modf(grid_box.left)[0],
         y=math.modf(grid_box.top)[0],
-        width=grid_box.width, height=grid_box.height,
-        clazz=grid_box.clazz, objectness=1.0
+        width=grid_box.width,
+        height=grid_box.height,
+        clazz=grid_box.clazz,
+        objectness=1.0
     )
 
     tensor = np.zeros(((5*N_BOXES)+N_CLASSES, N_GRID, N_GRID)).astype(np.float32)
@@ -141,8 +145,10 @@ def encode_box_tensor(yolo_box):
         = [norm_box.left, norm_box.top, norm_box.width, norm_box.height, 1.0]
     tensor[5:, grid_cell.y, grid_cell.x] \
         = np.eye(N_CLASSES)[np.array(int(grid_box.clazz))] # one hot vector
+#    print(tensor)
     return tensor
 
+'''
 # Tensor情報をYOLO座標系のBox情報に変換
 def decode_box_tensor(px, py, pw, ph, pobj, grid_cell):
     x = px[grid_cell.y, grid_cell.x]
@@ -156,6 +162,7 @@ def decode_box_tensor(px, py, pw, ph, pobj, grid_cell):
                 clazz=clazz, objectness=objectness)
     yolo_box = grid_to_yolo_coord(grid_box, grid_cell)
     return yolo_box
+'''
 
 # 検出候補のBounding Boxを選定
 def select_candidates(tensor):
