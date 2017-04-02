@@ -1,5 +1,5 @@
-{
-  "description": "学習データセットのJSONスキーマ",
+p{
+  "description": "データセットのJSONスキーマ",
   "type": "object",
   "required": ["dataset"],
   "additionalProperties": false,
@@ -9,7 +9,7 @@
       "minItems": 1,
       "items": {
         "type": "object",
-        "required": ["classes", "pattern_id", "color_image_path", "label_image_path", "bounding_boxes"],
+        "required": ["color_image_path"],
         "additionalProperties": false,
         "properties": {
           "classes": {
