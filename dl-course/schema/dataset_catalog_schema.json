@@ -1,4 +1,4 @@
-p{
+{
   "description": "データセットのJSONスキーマ",
   "type": "object",
   "required": ["dataset"],
