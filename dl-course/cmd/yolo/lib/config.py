@@ -23,7 +23,9 @@ IOU_THRESH = 0.3
 CLASSIFIER_FINAL_MODEL_PATH \
     = os.path.join(os.path.dirname(os.path.abspath(__file__)),
         '..', 'classifier', 'classifier_final.model')
-
 DETECTOR_FIRST_MODEL_PATH \
     = os.path.join(os.path.dirname(os.path.abspath(__file__)),
         '..', 'detector', 'detector_first.model')
+DETECTOR_FINAL_MODEL_PATH \
+    = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+        '..', 'detector', 'detector_final.model')

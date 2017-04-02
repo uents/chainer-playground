@@ -18,6 +18,9 @@ class Point():
         self.x = x
         self.y = y
 
+    def __repr__(self):
+        return '<Point x:%4.1f y:%4.1f>' % (self.x, self.y)
+
 class Box():
     def __init__(self, x, y, width, height, clazz=0, objectness=1.):
         self.left = x
@@ -148,21 +151,39 @@ def encode_box_tensor(yolo_box):
 #    print(tensor)
     return tensor
 
-'''
 # Tensor情報をYOLO座標系のBox情報に変換
-def decode_box_tensor(px, py, pw, ph, pobj, grid_cell):
-    x = px[grid_cell.y, grid_cell.x]
-    y = py[grid_cell.y, grid_cell.x]
-    w = pw[grid_cell.y, grid_cell.x]
-    h = ph[grid_cell.y, grid_cell.x]
-    clazz = np.argmax(pobj[grid_cell.y, grid_cell.x])
-    objectness = np.max(pobj[grid_cell.y, grid_cell.x])
+def decode_box_tensor(tensor):
+    px, py, pw, ph, pconf, pprob \
+        = np.array_split(tensor, indices_or_sections=(1,2,3,4,5), axis=0)
+    px = px.reshape(px.shape[1:])
+    py = py.reshape(py.shape[1:])
+    pw = pw.reshape(pw.shape[1:])
+    ph = ph.reshape(ph.shape[1:])
+    pconf = pconf.reshape(pconf.shape[1:])
 
-    grid_box = Box(x=x, y=y, w=w, h=h,
-                clazz=clazz, objectness=objectness)
-    yolo_box = grid_to_yolo_coord(grid_box, grid_cell)
-    return yolo_box
-'''
+    # グリッド毎のクラス確率を算出 (N_CLASSES, N_GRID, N_GRID)
+    class_prob_map = pprob * pconf
+    # 最大クラス確率となるクラスラベルを抽出 (N_GRID, N_GRID)
+    class_label_map = class_prob_map.argmax(axis=0)
+    # 全てのグリッドマップを算出 (N_GRID, N_GRID)
+    grid_map = np.tile(True, pconf.shape)
+    # 全てのグリッド位置を算出 (N_GRID, N_GRID)
+    grid_cells = [Point(x=float(point[1]), y=float(point[0]))
+                    for point in np.argwhere(grid_map)]
+
+    boxes = []
+    for i in six.moves.range(0, grid_map.sum()):
+        grid_box = Box(x=px[grid_map][i],
+                    y=py[grid_map][i],
+                    width=pw[grid_map][i],
+                    height=ph[grid_map][i],
+                    clazz=class_label_map[grid_map][i],
+                    objectness=class_prob_map.max(axis=0)[grid_map][i])
+        boxes.append(
+            {'box': grid_to_yolo_coord(grid_box, grid_cells[i]),
+             'grid_cell': grid_cells[i]}
+        )
+    return boxes
 
 # 検出候補のBounding Boxを選定
 def select_candidates(tensor):
@@ -180,7 +201,7 @@ def select_candidates(tensor):
     class_label_map = class_prob_map.argmax(axis=0)
     # 最大クラス確率が閾値以上のグリッドを検出候補として抽出 (N_GRID, N_GRID)
     candidate_map = class_prob_map.max(axis=0) > CLASS_PROBABILITY_THRESH
-    # 検出候補のグリッド位置を算出
+    # 検出候補のグリッド位置を抽出
     grid_cells = [Point(x=float(point[1]), y=float(point[0]))
                     for point in np.argwhere(candidate_map)]
 

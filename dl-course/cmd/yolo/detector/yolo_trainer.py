@@ -50,7 +50,6 @@ def load_catalog(catalog_file):
 
     dataset = filter(lambda item: item['bounding_boxes'] != [], catalog['dataset'])
     image_paths = np.asarray([item['color_image_path'] for item in dataset])
-
     truth_boxes = np.asarray([[dict_to_box(box) for box in item['bounding_boxes']]
                                 for item in dataset])
     return image_paths, truth_boxes
@@ -213,7 +212,7 @@ def train_model(args):
 
 
 def parse_arguments():
-    description = 'YOLO Detector Trainer'
+    description = 'YOLO Detection Trainer'
     parser = argparse.ArgumentParser(description=description)
     parser.add_argument('--model-file', type=str, dest='model_file', default=DETECTOR_FIRST_MODEL_PATH)
     parser.add_argument('--state-file', type=str, dest='state_file', default='')
