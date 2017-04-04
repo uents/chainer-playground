@@ -12,6 +12,7 @@ import itertools
 import numpy as np
 import cv2
 import json
+import pandas as pd
 
 import chainer
 import chainer.functions as F
@@ -204,15 +205,18 @@ def train_model(args):
             'train_loss': str(train_loss), 'train_map': str(train_map),
             'cv_loss': str(cv_loss), 'cv_map': str(cv_map)
         })
-#        if (epoch % 10) == 0:
-#            chainer.serializers.save_npz('detector_epoch{}.model'.format(epoch), model)
-#            chainer.serializers.save_npz('detector_epoch{}.state'.format(epoch), optimizer)
+        if (epoch % 10) == 0:
+            chainer.serializers.save_npz('detector_epoch{}.model'.format(epoch), model)
+            chainer.serializers.save_npz('detector_epoch{}.state'.format(epoch), optimizer)
 
-    with open('detector_train_log.json', 'w') as fp:
-        json.dump({'epoch': str(args.n_epoch), 'batch_size': str(args.batch_size), 'logs': logs},
-            fp, sort_keys=True, ensure_ascii=False, indent=2)
-    chainer.serializers.save_npz('detector_final.model', model)
-    chainer.serializers.save_npz('detector_final.state', optimizer)
+    if len(train_boxes) > 0:
+        df_logs = pd.DataFrame(
+            logs, columns=['epoch', 'train_loss', 'train_map', 'cv_loss', 'cv_map'])
+        with open('classifier_train_log.csv', 'w') as fp:
+            df_logs.to_csv(fp, encoding='cp932', index=False)
+
+        chainer.serializers.save_npz('detector_final.model', model)
+        chainer.serializers.save_npz('detector_final.state', optimizer)
 
 
 def parse_arguments():

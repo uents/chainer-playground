@@ -7,8 +7,8 @@ import sys
 import os
 
 # network configurations
-INPUT_SIZE = 448
-N_CNN_LAYER = 7
+INPUT_SIZE = 224
+N_CNN_LAYER = 6
 N_BOXES = 1
 N_GRID = 7
 N_CLASSES = 26  # 0..25

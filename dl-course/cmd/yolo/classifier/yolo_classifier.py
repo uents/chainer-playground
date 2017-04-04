@@ -11,6 +11,7 @@ import random
 import numpy as np
 import cv2
 import json
+import pandas as pd
 
 import chainer
 import chainer.functions as F
@@ -22,7 +23,6 @@ from yolo import *
 from image_process import *
 
 xp = np
-
 
 def load_catalog(catalog_file):
     try:
@@ -114,11 +114,14 @@ def train_model(args):
 #            chainer.serializers.save_npz('classifier_epoch{}.model'.format(epoch), model)
 #            chainer.serializers.save_npz('classifier_epoch{}.state'.format(epoch), optimizer)
 
-    with open('classifier_train_log.json', 'w') as fp:
-        json.dump({'epoch': str(args.n_epoch), 'batch_size': str(args.batch_size), 'logs': logs},
-            fp, sort_keys=True, ensure_ascii=False, indent=2)
-    chainer.serializers.save_npz('classifier_final.model', model)
-    chainer.serializers.save_npz('classifier_final.state', optimizer)
+    if len(train_labels) > 0:
+        df_logs = pd.DataFrame(
+            logs, columns=['epoch', 'train_loss', 'train_acc', 'cv_loss', 'cv_acc'])
+        with open('classifier_train_log.csv', 'w') as fp:
+            df_logs.to_csv(fp, encoding='cp932', index=False)
+
+        chainer.serializers.save_npz('classifier_final.model', model)
+        chainer.serializers.save_npz('classifier_final.state', optimizer)
 
 def parse_arguments():
     description = 'YOLO Classifier'
