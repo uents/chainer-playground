@@ -106,6 +106,8 @@ def mean_average_precision(positives):
 def one_epoch_train(model, optimizer, image_paths, ground_truth_boxes, batch_size, epoch):
     n_train = len(ground_truth_boxes)
     perm = np.random.permutation(n_train)
+    if n_train == 0:
+        return 0., 0.
 
     loss = 0.
     positives = init_positives()
@@ -139,6 +141,8 @@ def one_epoch_train(model, optimizer, image_paths, ground_truth_boxes, batch_siz
 
 def one_epoch_cv(model, optimizer, image_paths, ground_truth_boxes):
     n_valid = len(ground_truth_boxes)
+    if n_valid == 0:
+        return 0., 0.
 
     loss = 0.
     positives = init_positives()

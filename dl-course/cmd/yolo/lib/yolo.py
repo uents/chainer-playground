@@ -86,8 +86,8 @@ class YoloDetector(chainer.Chain):
             conv8  = L.Convolution2D(None, 1024, ksize=3, stride=1, pad=1),
             conv9  = L.Convolution2D(None, 1024, ksize=3, stride=1, pad=1),
 #            fc1  = L.Linear(50176, 256), # (1024,7,7)=50176
-            fc1  = L.Linear(50176, 2048), # (1024,7,7)=50176
-#            fc1  = L.Linear(50176, 4096), # (1024,7,7)=50176
+#            fc1  = L.Linear(50176, 2048), # (1024,7,7)=50176
+            fc1  = L.Linear(50176, 4096), # (1024,7,7)=50176
 #            fc2  = L.Linear(None, 4096),
             fc3  = L.Linear(None, ((N_BOXES*5)+N_CLASSES) * (N_GRID**2))
         )
@@ -131,14 +131,14 @@ class YoloDetector(chainer.Chain):
             = F.split_axis(h, indices_or_sections=(1,2,3,4,5), axis=1)
         # 教師データを抽出
         tx, ty, tw, th, tconf, tprob \
-            = np.array_split(chainer.cuda.to_cpu(t.data), indices_or_sections=(1,2,3,4,5), axis=1)
+            = np.array_split(self.from_variable(t), indices_or_sections=(1,2,3,4,5), axis=1)
 
         # オブジェクトが存在しないグリッドは、グリッド中心とする
         tx[tconf != 1.] = 0.5
         ty[tconf != 1.] = 0.5
         # オブジェクトが存在しないグリッドは、学習させない(誤差を相殺する)
         class_map = (tprob == 1.0)
-        tprob = pprob.data.copy()
+        tprob = self.from_variable(pprob)
         tprob[class_map] = 1.0
         # 学習係数を、オブジェクトが存在するグリッドか否かで調整
         box_scale_factor = np.tile(0.1, tconf.shape).astype(np.float32)
@@ -149,11 +149,11 @@ class YoloDetector(chainer.Chain):
         prob_scale_factor[tconf == 1.0] = 1.0
 
         # 損失誤差を算出
-        tx, ty, tw, th = self.__variable(tx), self.__variable(ty), self.__variable(tw), self.__variable(th)
-        tconf, tprob = self.__variable(tconf), self.__variable(tprob)
-        box_scale_factor = self.__variable(box_scale_factor)
-        conf_scale_factor = self.__variable(conf_scale_factor)
-        prob_scale_factor = self.__variable(prob_scale_factor)
+        tx, ty, tw, th = self.to_variable(tx), self.to_variable(ty), self.to_variable(tw), self.to_variable(th)
+        tconf, tprob = self.to_variable(tconf), self.to_variable(tprob)
+        box_scale_factor = self.to_variable(box_scale_factor)
+        conf_scale_factor = self.to_variable(conf_scale_factor)
+        prob_scale_factor = self.to_variable(prob_scale_factor)
 
         x_loss = F.sum(box_scale_factor * ((tx - px) ** 2))
         y_loss = F.sum(box_scale_factor * ((ty - py) ** 2))
@@ -167,14 +167,22 @@ class YoloDetector(chainer.Chain):
                   (x_loss.data, y_loss.data, w_loss.data, h_loss.data, conf_loss.data, prob_loss.data))
         self.loss = x_loss + y_loss + w_loss + h_loss + conf_loss + prob_loss
 
-        self.h = chainer.cuda.to_cpu(h.data)
+        self.h = self.from_variable(h)
         if self.train:
             return self.loss
         else:
             return self.h
 
-    def __variable(self, v):
+    def predict(self, x):
+        h = self.forward(x)
+        return self.from_variable(h)
+
+    def from_variable(self, v):
+        return chainer.cuda.to_cpu(v.data)
+
+    def to_variable(self, v):
         v = v.astype(np.float32)
         if self.gpu >= 0:
             v = chainer.cuda.to_gpu(v)
         return chainer.Variable(v)
+

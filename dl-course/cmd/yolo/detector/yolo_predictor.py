@@ -57,9 +57,9 @@ def predict(args):
         xs = chainer.Variable(xp.asarray(image).transpose(0,3,1,2).astype(np.float32) / 255.)
 
         model.train = False
-        h = model.forward(xs).data
+        h = model.predict(xs)
         predicted_boxes = decode_box_tensor(h[0])
-#        print(predicted_boxes)
+        print(predicted_boxes)
 
 def parse_arguments():
     description = 'YOLO Detection Predictor'
