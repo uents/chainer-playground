@@ -117,7 +117,7 @@ def train_model(args):
     if len(train_labels) > 0:
         df_logs = pd.DataFrame(
             logs, columns=['epoch', 'train_loss', 'train_acc', 'cv_loss', 'cv_acc'])
-        with open('classifier_train_log.csv', 'w') as fp:
+        with open('train_log.csv', 'w') as fp:
             df_logs.to_csv(fp, encoding='cp932', index=False)
 
         chainer.serializers.save_npz('classifier_final.model', model)
