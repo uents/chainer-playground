@@ -14,29 +14,8 @@ import cv2
 import json
 import jsonschema
 
-
-class Box():
-    def __init__(self, x, y, w, h):
-        self.left = x
-        self.top = y
-        self.width = w
-        self.height = h
-
-    @property
-    def right(self):
-        return self.left + self.width
-
-    @property
-    def bottom(self):
-        return self.top + self.height
-
-    @property
-    def area(self):
-        return self.width * self.height
-
-    @property
-    def aspect(self):
-        return float(self.width) / (self.height)
+sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'lib'))
+from box import *
 
 def load_catalog(catalog_file):
     try:
@@ -44,7 +23,6 @@ def load_catalog(catalog_file):
             catalog = json.load(fp)
     except IOError:
         return []
-
     return catalog['dataset']
 
 def extract_bounding_boxe(label_image, width, height):
@@ -95,8 +73,8 @@ def make_bg_images(args):
 def parse_arguments():
     description = 'background image maker'
     parser = argparse.ArgumentParser(description=description)
-    parser.add_argument('--catalog-file', type=str, dest='catalog_file', default='')
-    parser.add_argument('--output-dir', type=str, dest='output_dir', default='')
+    parser.add_argument('--catalog-file', type=str, dest='catalog_file', default='', required=True)
+    parser.add_argument('--output-dir', type=str, dest='output_dir', default='', required=True)
     return parser.parse_args()
 
 if __name__ == '__main__':
