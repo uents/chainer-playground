@@ -97,6 +97,7 @@ def make_catalog(input_dir, train_ratio=0.8):
         dataset = np.append(dataset, item)
         count += 1
     sys.stdout.write('\n')
+
     # カタログ情報を訓練用とクロスバリデーション用に分割
     whole_ixs = range(0, len(dataset))
     train_ixs = random.sample(whole_ixs, int(len(whole_ixs) * train_ratio))
@@ -105,27 +106,32 @@ def make_catalog(input_dir, train_ratio=0.8):
     return {'dataset': dataset[train_ixs].tolist()}, {'dataset': dataset[cv_ixs].tolist()}
 
 def parse_arguments():
-    description = 'make training dataset catalog'
+    description = 'single image catalog maker'
     parser = argparse.ArgumentParser(description=description)
     parser.add_argument('--input-dir', type=str, dest='input_dir', required=True)
-    parser.add_argument('--train-catalog-file', type=str, dest='train_file', required=True)
-    parser.add_argument('--cv-catalog-file', type=str, dest='cv_file', required=True)
+    parser.add_argument('--train-catalog-file', type=str, dest='train_file', default='')
+    parser.add_argument('--cv-catalog-file', type=str, dest='cv_file', default='')
     parser.add_argument('--train-ratio', type=float, dest='train_ratio', default=0.8)
     return parser.parse_args()
 
 if __name__ == '__main__':
     args = parse_arguments()
-    train_catalog, cv_catalog = make_catalog(args.input_dir, args.train_ratio)
 
-    train_dir = os.path.split(args.train_file)[0]
-    if not os.path.exists(train_dir):
-        os.makedirs(train_dir)
-    cv_dir = os.path.split(args.train_file)[0]
-    if not os.path.exists(cv_dir):
-        os.makedirs(cv_dir)
+    train_ratio = (args.train_raio if len(args.cv_file) > 0 else 1.0)
+    train_catalog, cv_catalog = make_catalog(args.input_dir, train_ratio)
 
-    with open(args.train_file, 'w') as fp:
-        json.dump(train_catalog, fp, sort_keys=True, ensure_ascii=False, indent=2)
-    with open(args.cv_file, 'w') as fp:
-        json.dump(cv_catalog, fp, sort_keys=True, ensure_ascii=False, indent=2)
+    if len(args.train_file) > 0 and len(train_catalog['dataset']) > 0:
+        train_dir = os.path.split(args.train_file)[0]
+        if len(train_dir) > 0 and (not os.path.exists(train_dir)):
+            os.makedirs(train_dir)
+        with open(args.train_file, 'w') as fp:
+            json.dump(train_catalog, fp, sort_keys=True, ensure_ascii=False, indent=2)
+
+    if len(args.cv_file) > 0 and len(cv_catalog['dataset']) > 0:
+        cv_dir = os.path.split(args.train_file)[0]
+        if len(cv_dir) > 0 and (not os.path.exists(cv_dir)):
+            os.makedirs(cv_dir)
+        with open(args.cv_file, 'w') as fp:
+            json.dump(cv_catalog, fp, sort_keys=True, ensure_ascii=False, indent=2)
+
     print('done')
