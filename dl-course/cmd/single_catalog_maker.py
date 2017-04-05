@@ -1,12 +1,5 @@
 # -*- coding: utf-8 -*-
 
-'''
-usage:
-  python make_train_catalog.py
-   --input-dir ../HDD2/contest/APC/Single
-   --output-file ../cache/train_catalog.json
-'''
-
 from __future__ import unicode_literals
 from __future__ import print_function
 import sys

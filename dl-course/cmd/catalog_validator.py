@@ -1,10 +1,5 @@
 # -*- coding: utf-8 -*-
 
-'''
-usage:
-  python valid_catalog.py --catalog-fine ../cache/train_catalog.json
-'''
-
 from __future__ import unicode_literals
 from __future__ import print_function
 import sys
@@ -14,7 +9,7 @@ import json
 import jsonschema
 
 def parse_arguments():
-    usage = 'valid dataset catalog'
+    usage = 'catalog validator'
     parser = argparse.ArgumentParser(usage=usage)
     parser.add_argument('--catalog-file', type=str, dest='catalog_file', required=True)
     return parser.parse_args()
