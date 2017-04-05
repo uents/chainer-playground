@@ -13,7 +13,6 @@ import cv2
 import json
 import jsonschema
 
-
 '''
 ラベル画像ファイルを探索する
 '''
@@ -82,21 +81,26 @@ def make_catalog(input_dir, train_ratio=0.8):
     df_items = pd.read_csv(os.path.join(label_image_dir, '..', 'item_table.csv'),
                            encoding='cp932')
     # ラベル画像を起点にカタログ情報を収集
-    dataset = np.array([])
-    count = 1
-    for path in find_label_images(label_image_dir):
+    dataset = []
+    for count, path in enumerate(find_label_images(label_image_dir), 1):
         sys.stdout.write('\r%d parse %s' % (count, path))
         item = make_catalog_item(camera_image_dir, label_image_dir, path, df_items)
-        dataset = np.append(dataset, item)
-        count += 1
+        dataset.append(item)
     sys.stdout.write('\n')
 
     # カタログ情報を訓練用とクロスバリデーション用に分割
-    whole_ixs = range(0, len(dataset))
-    train_ixs = random.sample(whole_ixs, int(len(whole_ixs) * train_ratio))
-    cv_ixs = list(set(whole_ixs) - set(train_ixs))
-    print('number of dataset: train:%d cv:%d' % (len(train_ixs), len(cv_ixs)))
-    return {'dataset': dataset[train_ixs].tolist()}, {'dataset': dataset[cv_ixs].tolist()}
+    train_dataset, cv_dataset = [], []
+    classes = np.unique(np.asarray([item['classes'] for item in dataset]).ravel())
+    for clazz in classes:
+        each_dataset = np.asarray(filter(lambda item: item['classes'] == [clazz], dataset))
+        all_ixs = range(0, len(each_dataset))
+        train_ixs = random.sample(all_ixs, int(len(all_ixs) * train_ratio))
+        cv_ixs = list(set(all_ixs) - set(train_ixs))
+        train_dataset += each_dataset[train_ixs].tolist()
+        cv_dataset += each_dataset[cv_ixs].tolist()
+
+    print('number of dataset: train:%d cv:%d' % (len(train_dataset), len(cv_dataset)))
+    return {'dataset': train_dataset}, {'dataset': cv_dataset}
 
 def parse_arguments():
     description = 'single image catalog maker'
@@ -110,7 +114,7 @@ def parse_arguments():
 if __name__ == '__main__':
     args = parse_arguments()
 
-    train_ratio = (args.train_raio if len(args.cv_file) > 0 else 1.0)
+    train_ratio = (args.train_ratio if len(args.cv_file) > 0 else 1.0)
     train_catalog, cv_catalog = make_catalog(args.input_dir, train_ratio)
 
     if len(args.train_file) > 0 and len(train_catalog['dataset']) > 0:
