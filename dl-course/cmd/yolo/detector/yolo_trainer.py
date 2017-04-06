@@ -41,7 +41,7 @@ def load_catalog(catalog_file):
     def dict_to_box(box):
         return Box(x=float(box['x']), y=float(box['y']),
                 width=float(box['width']), height=float(box['height']),
-                clazz=int(box['class']), objectness=1.)
+                confidence=1., clazz=int(box['class']), objectness=1.)
 
     try:
         with open(os.path.join(catalog_file), 'r') as fp:

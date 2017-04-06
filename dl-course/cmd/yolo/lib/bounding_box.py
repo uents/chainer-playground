@@ -22,11 +22,13 @@ class Point():
         return '<Point x:%4.1f y:%4.1f>' % (self.x, self.y)
 
 class Box():
-    def __init__(self, x, y, width, height, clazz=0, objectness=1.):
+    def __init__(self, x, y, width, height,
+                 confidence=0., clazz=0, objectness=1.):
         self.left = x
         self.top = y
         self.width = width
         self.height = height
+        self.confidence = confidence
         self.clazz = clazz
         self.objectness = objectness
 
@@ -91,7 +93,9 @@ def real_to_yolo_coord(box, width, height):
     w = box.width * INPUT_SIZE / width
     h = box.height * INPUT_SIZE / height
     return Box(x=x, y=y, width=w, height=h,
-                clazz=box.clazz, objectness=box.objectness)
+                confidence=box.confidence,
+                clazz=box.clazz,
+                objectness=box.objectness)
 
 # [448., 448.] => [7., 7.]
 # 矩形の始点は矩形中心
@@ -102,7 +106,9 @@ def yolo_to_grid_coord(box):
     w = box.width / INPUT_SIZE
     h = box.height / INPUT_SIZE
     return Box(x=x, y=y, width=w, height=h,
-                clazz=box.clazz, objectness=box.objectness)
+                confidence=box.confidence,
+                clazz=box.clazz,
+                objectness=box.objectness)
 
 # [7., 7.] => [448., 448.]
 # 矩形の始点は矩形左上
@@ -115,7 +121,9 @@ def grid_to_yolo_coord(box, grid_cell):
     w = min(w, INPUT_SIZE - x)
     h = min(h, INPUT_SIZE - y)
     return Box(x=x, y=y, width=w, height=h,
-                clazz=box.clazz, objectness=box.objectness)
+                confidence=box.confidence,
+                clazz=box.clazz,
+                objectness=box.objectness)
 
 # [448., 448.] => [real_width, real_height]
 # 矩形の始点は矩形左上
@@ -125,7 +133,9 @@ def yolo_to_real_coord(box, width, height):
     w = box.width * width / INPUT_SIZE
     h = box.height * height / INPUT_SIZE
     return Box(x=x, y=y, width=w, height=h,
-                clazz=box.clazz, objectness=box.objectness)
+                confidence=box.confidence,
+                clazz=box.clazz,
+                objectness=box.objectness)
 
 # YOLO座標系のBox情報をTensor情報に変換
 def encode_box_tensor(yolo_box):
@@ -139,6 +149,7 @@ def encode_box_tensor(yolo_box):
         y=math.modf(grid_box.top)[0],
         width=grid_box.width,
         height=grid_box.height,
+        confidence=grid_box.confidence,
         clazz=grid_box.clazz,
         objectness=1.0
     )
@@ -177,6 +188,7 @@ def decode_box_tensor(tensor):
                     y=py[grid_map][i],
                     width=pw[grid_map][i],
                     height=ph[grid_map][i],
+                    confidence=pconf[grid_map][i],
                     clazz=class_label_map[grid_map][i],
                     objectness=class_prob_map.max(axis=0)[grid_map][i])
         boxes.append(
@@ -211,6 +223,7 @@ def select_candidates(tensor):
                     y=py[candidate_map][i],
                     width=pw[candidate_map][i],
                     height=ph[candidate_map][i],
+                    confidence=pconf[candidate_map][i],
                     clazz=class_label_map[candidate_map][i],
                     objectness=class_prob_map.max(axis=0)[candidate_map][i])
         candidates.append(grid_to_yolo_coord(grid_box, grid_cells[i]))

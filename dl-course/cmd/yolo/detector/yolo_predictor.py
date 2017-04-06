@@ -47,6 +47,7 @@ def make_result_dict(predicted_boxes, real_width, real_height):
                 'y': str(box.top),
                 'width': str(box.width),
                 'height': str(box.height),
+                'confidence': str(box.confidence),
                 'class': str(int(box.clazz)),
                 'objectness': str(box.objectness)
             },
