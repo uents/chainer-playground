@@ -64,9 +64,10 @@ def single_augmentation(args):
         bg_image = cv2.imread(bg_image_path)
         bh, bw = bg_image.shape[:2]
 
-        corner_x = (bw - ow) / 2 # TODO: 乱数
-        corner_y = bh - oh - 128 # TODO: 乱数
-        new_image = overlay_image(obj_image, bg_image, corner=(corner_x, corner_y))
+        # TODO: obj_imageの回転
+        # TODO: obj_imageの拡縮
+
+        new_image, obj_box = overlay_image(obj_image, bg_image)
         cv2.imwrite('foo.bmp', new_image)
         break
     sys.stdout.write('\n')
