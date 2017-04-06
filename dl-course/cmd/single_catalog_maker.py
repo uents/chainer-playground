@@ -13,6 +13,9 @@ import cv2
 import json
 import jsonschema
 
+item_table_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                               '..', 'lib', 'item_table.csv')
+
 '''
 ラベル画像ファイルを探索する
 '''
@@ -76,7 +79,7 @@ def make_catalog(input_dir, train_ratio=0.8):
     label_image_dir = os.path.join(input_dir, 'mask_label', 'single')
 
     # クラスとRGB値の関係テーブルをロード
-    df_items = pd.read_csv(os.path.join('..', 'lib', 'item_table.csv'), encoding='cp932')
+    df_items = pd.read_csv(item_table_path, encoding='cp932')
 
     # ラベル画像を起点にカタログ情報を収集
     dataset = []
