@@ -29,12 +29,10 @@ def extract_bounding_boxes(path, df_items):
     boxes = []
     # ラベルの矩形領域と重心位置を取得
     # XXX:このロジックは複数ラベルに対応できない
-    labels_image = cv2.cvtColor(cv2.imread(path), cv2.COLOR_BGR2RGB)
-    width, height, _ = labels_image.shape
-    labels_gray = cv2.cvtColor(labels_image, cv2.COLOR_BGR2GRAY)
-    #_, labels_binary = cv2.threshold(labels_gray, 0, 255, cv2.THRESH_BINARY)
-    #labels_binary = cv2.bitwise_not(labels_binary)
-    _, _, stats, centroids = cv2.connectedComponentsWithStats(labels_gray)
+    label_image = cv2.cvtColor(cv2.imread(path), cv2.COLOR_BGR2RGB)
+    width, height, _ = label_image.shape
+    label_gray = cv2.cvtColor(label_image, cv2.COLOR_BGR2GRAY)
+    _, _, stats, centroids = cv2.connectedComponentsWithStats(label_gray)
 
     for stat, centroid in zip(stats, centroids):
         b_x, b_y, b_w, b_h, _ = stat[0], stat[1], stat[2], stat[3], stat[4]
@@ -43,7 +41,7 @@ def extract_bounding_boxes(path, df_items):
         if b_w * b_h <= (width * 2) or b_w * b_h >= (width * height  * 0.95):
             continue
         # 重心位置の画素からクラス値を決定
-        r, g, b = labels_image[c_x][c_y]
+        r, g, b = label_image[c_x][c_y]
         clazz = int(df_items[(df_items['r'] == r) & (df_items['g'] == g) & (df_items['b'] == b)]['class'].values[0])
         # 結果を格納
         boxes.append({
@@ -78,8 +76,8 @@ def make_catalog(input_dir, train_ratio=0.8):
     label_image_dir = os.path.join(input_dir, 'mask_label', 'single')
 
     # クラスとRGB値の関係テーブルをロード
-    df_items = pd.read_csv(os.path.join(label_image_dir, '..', 'item_table.csv'),
-                           encoding='cp932')
+    df_items = pd.read_csv(os.path.join('..', 'lib', 'item_table.csv'), encoding='cp932')
+
     # ラベル画像を起点にカタログ情報を収集
     dataset = []
     for count, path in enumerate(find_label_images(label_image_dir), 1):

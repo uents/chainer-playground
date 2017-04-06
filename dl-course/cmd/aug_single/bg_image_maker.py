@@ -14,7 +14,8 @@ import cv2
 import json
 import jsonschema
 
-sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'lib'))
+sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                             '..', '..', 'lib'))
 from box import *
 
 def load_catalog(catalog_file):
