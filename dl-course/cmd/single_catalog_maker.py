@@ -13,8 +13,21 @@ import cv2
 import json
 import jsonschema
 
-item_table_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                               '..', 'lib', 'item_table.csv')
+'''
+クラスのRGB値テーブルをロードする
+'''
+def load_class_color_table():
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                        '..', 'lib', 'item_table.csv')
+    with open(path, 'r') as fp:
+        df = pd.read_csv(fp, encoding='cp932', index_col=['class'])
+    return df
+
+'''
+ピクセルのRGB値からクラスを判定する
+'''
+def find_class_by_color(df, r=0, g=0, b=0):
+    return int(df[(df['r'] == r) & (df['g'] == g) & (df['b'] == b)].index[0])
 
 '''
 ラベル画像ファイルを探索する
@@ -28,7 +41,7 @@ def find_label_images(dir_path):
 '''
 ラベルの矩形領域とクラス値を抽出する
 '''
-def extract_bounding_boxes(path, df_items):
+def extract_bounding_boxes(path, df_class_color_table):
     boxes = []
     # ラベルの矩形領域と重心位置を取得
     # XXX:このロジックは複数ラベルに対応できない
@@ -43,24 +56,27 @@ def extract_bounding_boxes(path, df_items):
         # 面積が極端に小さい・大きい領域は誤検出のため除外
         if b_w * b_h <= (width * 2) or b_w * b_h >= (width * height  * 0.95):
             continue
+
         # 重心位置の画素からクラス値を決定
         r, g, b = label_image[c_x][c_y]
-        clazz = int(df_items[(df_items['r'] == r) & (df_items['g'] == g) & (df_items['b'] == b)]['class'].values[0])
+        clazz = find_class_by_color(df_class_color_table, r, g, b)
+
         # 結果を格納
         boxes.append({
-            'class': str(clazz), 'x': str(b_x), 'y': str(b_y), 'width': str(b_w), 'height': str(b_h)
+            'class': str(clazz), 'x': str(b_x), 'y': str(b_y),
+            'width': str(b_w), 'height': str(b_h)
         })
     return boxes
 
 '''
 学習データセットのカタログの各アイテム情報を生成する
 '''
-def make_catalog_item(camera_image_dir, label_image_dir, label_image_path, df_items):
+def make_catalog_item(camera_image_dir, label_image_dir, label_image_path, df_class_color_table):
     _, clazz, pattern_id, _ = label_image_path.split(label_image_dir)[1].split('/')
     classes = clazz.split('_')
     color_image_path = os.path.join(camera_image_dir, clazz, pattern_id, 'color.bmp')
     depth_image_path = os.path.join(camera_image_dir, clazz, pattern_id, 'depth.bmp.bmp')
-    bounding_boxes = extract_bounding_boxes(label_image_path, df_items)
+    bounding_boxes = extract_bounding_boxes(label_image_path, df_class_color_table)
     return {
         'classes': classes,
         'pattern_id': pattern_id,
@@ -79,13 +95,13 @@ def make_catalog(input_dir, train_ratio=0.8):
     label_image_dir = os.path.join(input_dir, 'mask_label', 'single')
 
     # クラスとRGB値の関係テーブルをロード
-    df_items = pd.read_csv(item_table_path, encoding='cp932')
+    df_class_color_table = load_class_color_table()
 
     # ラベル画像を起点にカタログ情報を収集
     dataset = []
     for count, path in enumerate(find_label_images(label_image_dir), 1):
         sys.stdout.write('\r%d parse %s' % (count, path))
-        item = make_catalog_item(camera_image_dir, label_image_dir, path, df_items)
+        item = make_catalog_item(camera_image_dir, label_image_dir, path, df_class_color_table)
         dataset.append(item)
     sys.stdout.write('\n')
 
