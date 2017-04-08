@@ -26,15 +26,15 @@
           },
           "color_image_path": {
             "type": "string",
-            "pattern": "\/[0-9]+\/color.bmp$"
+            "pattern": "color.bmp$"
           },
           "depth_image_path": {
             "type": "string",
-            "pattern": "\/[0-9]+\/depth.bmp.bmp$"
+            "pattern": "depth.bmp"
           },
           "label_image_path": {
             "type": "string",
-            "pattern": "\/[0-9]+\/label.bmp$"
+            "pattern": "label.bmp$"
           },
           "bounding_boxes": {
             "type": "array",
