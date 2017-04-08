@@ -7,11 +7,16 @@ import sys
 import os
 
 class Box():
-    def __init__(self, x, y, w, h):
+    def __init__(self, x, y, w, h, clazz=0):
         self.left = x
         self.top = y
         self.width = w
         self.height = h
+        self.clazz = clazz
+
+    def __repr__(self):
+        return '<Box x:%4.1f y:%4.1f w:%4.1f h:%4.1f c:%d>' % \
+            (self.left, self.top, self.width, self.height, self.clazz)
 
     @property
     def right(self):

@@ -8,7 +8,7 @@ import math
 import random
 import numpy as np
 import cv2
-import scipy
+import scipy.ndimage
 import PIL.Image
 
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)),
@@ -35,14 +35,17 @@ def scale_image(image, scale):
 def rotate_image(image, angle):
     return scipy.ndimage.rotate(image, angle, reshape=True)
 
-def overlay_image(obj_image, bg_image):
+def overlay_image(obj_image, bg_image, corner=None):
     oh, ow = obj_image.shape[:2]
-    bh, bw = bg_image.shape[:2]
-    ox = int((bw-ow)/2 + random.uniform(-0.4*(bw-ow), 0.4*(bw-ow)))
-    oy = int((bh-oh)   - max(random.uniform(0.1*(bh-oh), 0.3*(bh-oh)), 0.05*bh))
-    box = Box(x=ow, y=oy, w=ow, h=oh)
+    if corner is None:
+        bh, bw = bg_image.shape[:2]
+        ox = int(random.uniform(0., bw-ow))
+        oy = int(random.uniform(0.85*bh - oh, 0.95*bh - oh))
+    else:
+        ox, oy = corner
+    bounding_box = Box(x=ox, y=oy, w=ow, h=oh)
 
     obj_pimage = PIL.Image.fromarray(cv2.cvtColor(obj_image, cv2.COLOR_BGRA2RGBA))
     new_pimage = PIL.Image.fromarray(cv2.cvtColor(bg_image, cv2.COLOR_BGR2RGBA))
-    new_pimage.paste(obj_pimage, box=(ox, ow), mask=obj_pimage)
-    return cv2.cvtColor(np.asarray(new_pimage), cv2.COLOR_RGBA2BGR), box
+    new_pimage.paste(obj_pimage, box=(ox, oy), mask=obj_pimage)
+    return cv2.cvtColor(np.asarray(new_pimage), cv2.COLOR_RGBA2BGR), bounding_box
