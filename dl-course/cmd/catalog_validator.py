@@ -18,8 +18,9 @@ if __name__ == '__main__':
     args = parse_arguments()
 
     # スキーマそのものを検定 (不正な場合は例外が発生)
-    schema_file = os.path.join('..', 'schema', 'dataset_catalog_schema.json')
-    with open(schema_file, 'r') as fp:
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                        '..', 'schema', 'dataset_catalog_schema.json')
+    with open(path, 'r') as fp:
         catalog_schema = json.load(fp)
     jsonschema.Draft4Validator.check_schema(catalog_schema)
 
