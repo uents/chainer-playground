@@ -30,8 +30,9 @@ xp = np
 learning_schedules = {
     '0'    : 1e-5,
     '500'  : 1e-4,
-    '10000': 1e-5,
-    '20000': 1e-6
+    '2000' : 1e-3,
+    '10000': 1e-4,
+    '20000': 1e-5
 }
 momentum = 0.9
 weight_decay = 0.005
@@ -178,7 +179,7 @@ def train_model(args):
 
         batch_dataset = np.random.choice(train_dataset, args.batch_size)
         train_loss = perform_train(model, optimizer, batch_dataset)
-#        print('mini-batch:%d loss:%f' % (iter_count, train_loss))
+        print('mini-batch:%d %s' % (iter_count, model.loss_log))
 
         if (iter_count == 1) or (iter_count == args.iteration) or (iter_count % 100 == 0):
             cv_loss, cv_map = perform_cv(model, optimizer, cv_dataset)
