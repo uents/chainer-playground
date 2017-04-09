@@ -120,7 +120,7 @@ def single_augmentation(args):
         new_color_image_path = os.path.join(dir_path, prefix + '_color.bmp')
         new_label_image_path = os.path.join(dir_path, prefix + '_label.bmp')
         cv2.imwrite(new_color_image_path, new_color_image)
-        cv2.imwrite(new_label_image_path, new_label_image)
+#        cv2.imwrite(new_label_image_path, new_label_image)
 
         # カタログ情報に追加
         new_dataset.append({
@@ -146,8 +146,8 @@ def parse_arguments():
     parser.add_argument('--bg-image-dir', type=str, dest='bg_image_dir', default='', required=True)
     parser.add_argument('--output-dir', type=str, dest='output_dir', default='Single')
     parser.add_argument('--number', '-n', type=int, dest='number', default=1)
-    parser.add_argument('--with-rotation', type=str, dest='with_rotation', default=True)
-    parser.add_argument('--with-scaling', type=str, dest='with_scaling', default=True)
+    parser.add_argument('--with-rotation', type=bool, dest='with_rotation', default=True)
+    parser.add_argument('--with-scaling', type=bool, dest='with_scaling', default=True)
     return parser.parse_args()
 
 if __name__ == '__main__':

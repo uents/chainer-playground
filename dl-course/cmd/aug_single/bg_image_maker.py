@@ -66,8 +66,11 @@ def make_bg_images(args):
         color_image = cv2.imread(item['color_image_path'])
         bg_images.append(make_bg_image(color_image, box))
 
+    if not os.path.exists(args.output_dir):
+        os.makedirs(args.output_dir)
+
     for i, bg_image in enumerate(bg_images, 1):
-        path = os.path.join(args.output_dir, ('bg_image%02d.bmp' % i))
+        path = os.path.join(args.output_dir, ('bg_image_%02d.bmp' % i))
         print('save %s' % path)
         cv2.imwrite(path, bg_image)
 
