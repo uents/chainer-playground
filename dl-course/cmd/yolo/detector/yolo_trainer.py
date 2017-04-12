@@ -188,6 +188,7 @@ def train_model(args):
 
         batch_dataset = np.random.choice(train_dataset, args.batch_size)
         train_loss = perform_train(model, optimizer, batch_dataset)
+        train_map = model.mean_ap
         print('mini-batch:%d %s' % (iter_count, model.loss_log))
 
         if not os.path.exists(SAVE_DIR):
@@ -196,11 +197,11 @@ def train_model(args):
     
         if (iter_count == 1) or (iter_count % 100 == 0) or (iter_count == args.iteration):
             cv_loss, cv_map = perform_cv(model, optimizer, cv_dataset)
-            print('iter:%d trian loss:%f cv loss:%f map:%f' %
-                (iter_count, train_loss, cv_loss, cv_map))
+            print('iter:%d trian loss:%f map:%f cv loss:%f map:%f' %
+                (iter_count, train_loss, train_map, cv_loss, cv_map))
             logs.append({
                 'iteration': str(iter_count),
-                'train_loss': str(train_loss), 'train_map': str(0.0),
+                'train_loss': str(train_loss), 'train_map': str(train_map),
                 'cv_loss': str(cv_loss), 'cv_map': str(cv_map)
             })
 #            chainer.serializers.save_npz('detector_iter{}.model'.format(str(iter_count).zfill(5)), model)

@@ -5,6 +5,7 @@ from __future__ import print_function
 import six
 import sys
 import os
+import itertools
 import numpy as np
 
 import chainer
@@ -125,7 +126,7 @@ class YoloDetector(chainer.Chain):
         h = F.reshape(h, (batch_size, (5*N_BOXES)+N_CLASSES, N_GRID, N_GRID))
         return h
 
-    def __call__(self, x, t):
+    def __call__(self, x, t, debug=False):
         batch_size = t.data.shape[0]
 
         # 推論を実行
@@ -166,14 +167,28 @@ class YoloDetector(chainer.Chain):
         conf_loss = F.sum(conf_scale_factor * ((tconf - pconf) ** 2))
         prob_loss = F.sum(prob_scale_factor * F.reshape(F.sum(((tprob - pprob) ** 2), axis=1), prob_scale_factor.shape))
 
-        self.loss_log = ("loss x:%03.4f y:%03.4f w:%03.4f h:%03.4f conf:%03.4f prob:%03.4f" %
-                         (x_loss.data / batch_size, y_loss.data / batch_size,
+        self.h = self.from_variable(h)
+
+        n_correct = 0
+        positives = init_positives()
+        for batch in six.moves.range(0, batch_size):
+            truth_boxes = [box['box'] for box in decode_box_tensor(t.data.get()[batch])]
+            predicted_boxes = self.tensor_to_boxes(self.h[batch])
+            positives = add_positives(positives, count_positives(predicted_boxes, truth_boxes))
+            for pred_box, truth_box in itertools.product(predicted_boxes, truth_boxes):
+                correct, iou = Box.correct(pred_box, [truth_box])
+#                print('{0} {1} {2:.3f} pred:{3} truth:{4}'.format(
+#                    batch + 1, correct, iou, pred_box, truth_box))
+                n_correct += int(correct)
+
+        n_correct = max(n_correct, 1)
+        self.mean_ap = mean_average_precision(positives)
+
+        self.loss_log = ("loss corr:%d x:%3.4f y:%3.4f w:%3.4f h:%3.4f conf:%3.4f prob:%3.4f" %
+                         (n_correct, x_loss.data / batch_size, y_loss.data / batch_size,
                           w_loss.data / batch_size, h_loss.data / batch_size,
                           conf_loss.data / batch_size, prob_loss.data / batch_size))
-        self.loss = (x_loss + y_loss + w_loss + h_loss + conf_loss + prob_loss) / batch_size
-#        self.loss = prob_loss / batch_size
-
-        self.h = self.from_variable(h)
+        self.loss = (x_loss + y_loss + w_loss + h_loss + conf_loss + prob_loss) / n_correct
         if self.train:
             return self.loss
         else:
@@ -183,11 +198,45 @@ class YoloDetector(chainer.Chain):
         h = self.forward(x)
         return self.from_variable(h)
 
+    def tensor_to_boxes(self, tensor):
+        return nms(select_candidates(tensor))
+
     def from_variable(self, v):
         return chainer.cuda.to_cpu(v.data)
 
-    def to_variable(self, v):
-        v = v.astype(np.float32)
+    def to_variable(self, v, t=np.float32):
+        v = v.astype(t)
         if self.gpu >= 0:
             v = chainer.cuda.to_gpu(v)
         return chainer.Variable(v)
+
+
+def init_positives():
+    return [{'true': 0, 'false': 0}  for i in range(0, N_CLASSES)]
+
+def count_positives(predicted_boxes, truth_boxes):
+    positives = init_positives()
+    for pred_box in predicted_boxes:
+        correct, iou = Box.correct(pred_box, truth_boxes)
+        if correct:
+            positives[int(pred_box.clazz)]['true'] += 1
+        else:
+            positives[int(pred_box.clazz)]['false'] += 1
+    return positives
+
+def add_positives(pos1, pos2):
+    def add_item(item1, item2):
+        return {'true': item1['true'] + item2['true'],
+                'false': item1['false'] + item2['false']}
+    return [add_item(item1, item2) for item1, item2 in zip(pos1, pos2)]
+
+def average_precisions(positives):
+    def precision(tp, fp):
+        if tp == 0 and fp == 0:
+            return 0.
+        return float(tp) / (tp + fp)
+    return [precision(p['true'], p['false']) for p in positives]
+
+def mean_average_precision(positives):
+    aps = average_precisions(positives)
+    return np.asarray(aps).mean()

@@ -19,7 +19,7 @@ N_CLASSES = 26  # 0..25
 MOMENTUM = 0.9
 WEIGHT_DECAY = 0.0005
 LR_SCHEDULES = {
-    '1'    : 1e-3
+    '1'    : 1e-4
 }
 
 DROPOUT_RATIO = 0.5
@@ -28,7 +28,7 @@ SCALE_FACTORS = {
     'nocoord': 0.1,
     'obj': 1.0,
     'noobj': 0.5,
-    'prob': 2.0
+    'prob': 3.0
 }
 
 # detection configurations
