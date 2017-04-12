@@ -79,10 +79,10 @@ class Box():
     def correct(self, pred_box, truth_boxes):
         best_score, best_truth = Box.best_iou(pred_box, truth_boxes)
         if best_score <= 0.5:
-            return False
+            return False, best_score
         if pred_box.clazz != best_truth.clazz:
-            return False
-        return True
+            return False, best_score
+        return True, best_score
 
 
 # [real_width, real_height] => [448., 448.]

@@ -69,7 +69,8 @@ def init_positives():
 def count_positives(predicted_boxes, truth_boxes):
     positives = init_positives()
     for pred_box in predicted_boxes:
-        if Box.correct(pred_box, truth_boxes):
+        correct, iou = Box.correct(pred_box, truth_boxes)
+        if correct:
             positives[int(pred_box.clazz)]['true'] += 1
         else:
             positives[int(pred_box.clazz)]['false'] += 1
@@ -89,7 +90,7 @@ def average_precisions(positives):
     return [precision(p['true'], p['false']) for p in positives]
 
 def mean_average_precision(positives):
-    print('precision:{}'.format(positives))
+    print('precision:{}'.format([(i, pos) for i, pos in enumerate(positives, 0)]))
     aps = average_precisions(positives)
     return np.asarray(aps).mean()
 
@@ -130,16 +131,20 @@ def perform_cv(model, optimizer, dataset):
 
         for batch in six.moves.range(0, len(ix)):
             predicted_boxes = tensor_to_boxes(model.h[batch])
-            positives = add_positives(
-                positives, count_positives(predicted_boxes, truth_boxes[batch]))
+            positives = add_positives(positives, count_positives(predicted_boxes, truth_boxes[batch]))
             for pred_box, truth_box in itertools.product(predicted_boxes, truth_boxes[batch]):
-                print('{} {} pred:{} truth:{}'.format(
-                    count + batch + 1, Box.correct(pred_box, [truth_box]), pred_box, truth_box))
+                correct, iou = Box.correct(pred_box, [truth_box])
+                print('{0} {1} {2:.3f} pred:{3} truth:{4}'.format(
+                    count + batch + 1, correct, iou, pred_box, truth_box))
 
     return loss, mean_average_precision(positives)
 
 def save_learning_params(args):
     params = {
+        'catalog_file': {
+            'train': args.train_catalog_file,
+            'cv': args.cv_catalog_file
+        },
         'iteration': args.iteration,
         'batch_size': args.batch_size,
         'momentum': MOMENTUM,
@@ -155,8 +160,8 @@ def save_learning_params(args):
 
 
 def train_model(args):
-    print('train model: gpu:%d iteration:%d batch_size:%d' % \
-        (args.gpu, args.iteration, args.batch_size))
+    print('train: gpu:%d iteration:%d batch_size:%d save_dir:%s' % \
+          (args.gpu, args.iteration, args.batch_size, os.path.split(SAVE_DIR)[1]))
 
     model = YoloDetector(args.gpu)
     if len(args.model_file) > 0:
@@ -189,7 +194,7 @@ def train_model(args):
             os.makedirs(SAVE_DIR)
             save_learning_params(args)
     
-        if (iter_count == 1) or (iter_count == args.iteration) or (iter_count % 100 == 0):
+        if (iter_count == 1) or (iter_count % 100 == 0) or (iter_count == args.iteration):
             cv_loss, cv_map = perform_cv(model, optimizer, cv_dataset)
             print('iter:%d trian loss:%f cv loss:%f map:%f' %
                 (iter_count, train_loss, cv_loss, cv_map))
