@@ -28,14 +28,11 @@ xp = np
 
 # training configurations
 learning_schedules = {
-    '0'    : 1e-5,
-    '500'  : 1e-4,
-    '2000' : 1e-3,
-    '10000': 1e-4,
-    '20000': 1e-5
+    '1'    : 1e-3,
+    '500'  : 1e-3
 }
 momentum = 0.9
-weight_decay = 0.005
+weight_decay = 0.0005
 
 
 def load_catalog(catalog_file):
@@ -46,10 +43,6 @@ def load_catalog(catalog_file):
         return []
     dataset = filter(lambda item: item['bounding_boxes'] != [], catalog['dataset'])
     return dataset
-#    image_paths = np.asarray([item['color_image_path'] for item in dataset])
-#    truth_boxes = np.asarray([[dict_to_box(box) for box in item['bounding_boxes']]
-#                                for item in dataset])
-#    return image_paths, truth_boxes
 
 def dict_to_box(box):
     return Box(x=float(box['x']), y=float(box['y']),
@@ -160,7 +153,7 @@ def train_model(args):
         chainer.serializers.load_npz(args.model_file, model)
 
     optimizer = chainer.optimizers.MomentumSGD(
-        lr=learning_schedules['0'], momentum=momentum)
+        lr=learning_schedules['1'], momentum=momentum)
     optimizer.setup(model)
     if len(args.optimizer_file) > 0:
         print('load optimizer: %s' % (args.optimizer_file))
@@ -191,15 +184,16 @@ def train_model(args):
                 'cv_loss': str(cv_loss), 'cv_map': str(cv_map)
             })
 #            chainer.serializers.save_npz('detector_iter{}.model'.format(str(iter_count).zfill(5)), model)
-#            chainer.serializers.save_npz('detectory_iter{}.state'.format(str(iter_count).zfill(5)), optimizer)
+#            chainer.serializers.save_npz('detector_iter{}.state'.format(str(iter_count).zfill(5)), optimizer)
+
+            df_logs = pd.DataFrame(logs,
+                columns=['iteration', 'train_loss', 'train_map', 'cv_loss', 'cv_map'])
+            with open('train_log.csv', 'w') as fp:
+                df_logs.to_csv(fp, encoding='cp932', index=False)
 
     if len(train_dataset) > 0:
-        df_logs = pd.DataFrame(logs,
-            columns=['iteration', 'train_loss', 'train_map', 'cv_loss', 'cv_map'])
-        with open('train_log.csv', 'w') as fp:
-            df_logs.to_csv(fp, encoding='cp932', index=False)
-        chainer.serializers.save_npz('detectory_final.model', model)
-        chainer.serializers.save_npz('detectory_final.state', optimizer)
+        chainer.serializers.save_npz('detector_final.model', model)
+        chainer.serializers.save_npz('detector_final.state', optimizer)
 
 def parse_arguments():
     description = 'YOLO Detection Trainer'

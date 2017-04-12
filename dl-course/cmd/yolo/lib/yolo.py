@@ -126,6 +126,8 @@ class YoloDetector(chainer.Chain):
         return h
 
     def __call__(self, x, t):
+        batch_size = t.data.shape[0]
+
         # 推論を実行
         h = self.forward(x)
         px, py, pw, ph, pconf, pprob \
@@ -145,7 +147,7 @@ class YoloDetector(chainer.Chain):
         # 学習係数を、オブジェクトが存在するグリッドか否かで調整
         box_scale_factor = np.tile(0.1, tconf.shape).astype(np.float32)
         box_scale_factor[tconf == 1.0] = 5.0
-        conf_scale_factor = np.tile(0.5, tconf.shape).astype(np.float32)
+        conf_scale_factor = np.tile(0.2, tconf.shape).astype(np.float32)
         conf_scale_factor[tconf == 1.0] = 1.0
         prob_scale_factor = np.tile(0.0, tconf.shape).astype(np.float32)
         prob_scale_factor[tconf == 1.0] = 2.0
@@ -164,9 +166,12 @@ class YoloDetector(chainer.Chain):
         conf_loss = F.sum(conf_scale_factor * ((tconf - pconf) ** 2))
         prob_loss = F.sum(prob_scale_factor * F.reshape(F.sum(((tprob - pprob) ** 2), axis=1), prob_scale_factor.shape))
 
-        self.loss_log = "loss x:%03.4f y:%03.4f w:%03.4f h:%03.4f conf:%03.4f prob:%03.4f" %
-            (x_loss.data, y_loss.data, w_loss.data, h_loss.data, conf_loss.data, prob_loss.data)
-        self.loss = x_loss + y_loss + w_loss + h_loss + conf_loss + prob_loss
+        self.loss_log = ("loss x:%03.4f y:%03.4f w:%03.4f h:%03.4f conf:%03.4f prob:%03.4f" %
+                         (x_loss.data / batch_size, y_loss.data / batch_size,
+                          w_loss.data / batch_size, h_loss.data / batch_size,
+                          conf_loss.data / batch_size, prob_loss.data / batch_size))
+        self.loss = (x_loss + y_loss + w_loss + h_loss + conf_loss + prob_loss) / batch_size
+#        self.loss = prob_loss / batch_size
 
         self.h = self.from_variable(h)
         if self.train:
