@@ -26,7 +26,7 @@ from bounding_box import *
 from image_process import *
 
 SAVE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                        dt.datetime.now().strftime('%Y-%m-%d_%H%M%S'))
+                        'snapshot_' + dt.datetime.now().strftime('%Y-%m-%d_%H%M%S'))
 xp = np
 
 # training configurations
@@ -146,12 +146,26 @@ def perform_cv(model, optimizer, dataset):
 
     return loss, mean_average_precision(positives)
 
+def save_learning_params(args):
+    params = {
+        'iteration': args.iteration,
+        'batch_size': args.batch_size,
+        'learning_rate_schedule': learning_schedules,
+        'class_prob_thresh': CLASS_PROBABILITY_THRESH,
+        'iou_thresh': IOU_THRESH
+    }
+    with open(os.path.join(SAVE_DIR, 'params.json'), 'w') as fp:
+        json.dump(params, fp, sort_keys=True, ensure_ascii=False, indent=2)
+
+
 def train_model(args):
     print('train model: gpu:%d iteration:%d batch_size:%d' % \
         (args.gpu, args.iteration, args.batch_size))
 
     if not os.path.exists(SAVE_DIR):
         os.makedirs(SAVE_DIR)
+
+    save_learning_params(args)
 
     model = YoloDetector(args.gpu)
     if len(args.model_file) > 0:
