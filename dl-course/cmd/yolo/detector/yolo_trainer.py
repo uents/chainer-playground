@@ -9,6 +9,7 @@ import argparse
 import math
 import random
 import itertools
+import datetime as dt
 import numpy as np
 import cv2
 import json
@@ -24,6 +25,8 @@ from yolo import *
 from bounding_box import *
 from image_process import *
 
+SAVE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                        dt.datetime.now().strftime('%Y-%m-%d_%H%M%S'))
 xp = np
 
 # training configurations
@@ -147,6 +150,9 @@ def train_model(args):
     print('train model: gpu:%d iteration:%d batch_size:%d' % \
         (args.gpu, args.iteration, args.batch_size))
 
+    if not os.path.exists(SAVE_DIR):
+        os.makedirs(SAVE_DIR)
+
     model = YoloDetector(args.gpu)
     if len(args.model_file) > 0:
         print('load model: %s' % (args.model_file))
@@ -188,12 +194,12 @@ def train_model(args):
 
             df_logs = pd.DataFrame(logs,
                 columns=['iteration', 'train_loss', 'train_map', 'cv_loss', 'cv_map'])
-            with open('train_log.csv', 'w') as fp:
+            with open(os.path.join(SAVE_DIR, 'train_log.csv'), 'w') as fp:
                 df_logs.to_csv(fp, encoding='cp932', index=False)
 
     if len(train_dataset) > 0:
-        chainer.serializers.save_npz('detector_final.model', model)
-        chainer.serializers.save_npz('detector_final.state', optimizer)
+        chainer.serializers.save_npz(os.path.join(SAVE_DIR, 'detector_final.model'), model)
+        chainer.serializers.save_npz(os.path.join(SAVE_DIR, 'detector_final.state'), optimizer)
 
 def parse_arguments():
     description = 'YOLO Detection Trainer'
