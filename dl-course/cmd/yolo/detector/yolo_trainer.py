@@ -29,14 +29,6 @@ SAVE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                         'snapshot_' + dt.datetime.now().strftime('%Y-%m-%d_%H%M%S'))
 xp = np
 
-# training configurations
-learning_schedules = {
-    '1'    : 1e-3,
-    '500'  : 1e-3
-}
-momentum = 0.9
-weight_decay = 0.0005
-
 
 def load_catalog(catalog_file):
     try:
@@ -150,7 +142,11 @@ def save_learning_params(args):
     params = {
         'iteration': args.iteration,
         'batch_size': args.batch_size,
-        'learning_rate_schedule': learning_schedules,
+        'momentum': MOMENTUM,
+        'weight_decay': WEIGHT_DECAY,
+        'lr_schedules': LR_SCHEDULES,
+        'dropout_ratio': DROPOUT_RATIO,
+        'scale_factors': SCALE_FACTORS,
         'class_prob_thresh': CLASS_PROBABILITY_THRESH,
         'iou_thresh': IOU_THRESH
     }
@@ -162,24 +158,19 @@ def train_model(args):
     print('train model: gpu:%d iteration:%d batch_size:%d' % \
         (args.gpu, args.iteration, args.batch_size))
 
-    if not os.path.exists(SAVE_DIR):
-        os.makedirs(SAVE_DIR)
-
-    save_learning_params(args)
-
     model = YoloDetector(args.gpu)
     if len(args.model_file) > 0:
         print('load model: %s' % (args.model_file))
         chainer.serializers.load_npz(args.model_file, model)
 
     optimizer = chainer.optimizers.MomentumSGD(
-        lr=learning_schedules['1'], momentum=momentum)
+        lr=LR_SCHEDULES['1'], momentum=MOMENTUM)
     optimizer.setup(model)
     if len(args.optimizer_file) > 0:
         print('load optimizer: %s' % (args.optimizer_file))
         chainer.serializers.load_npz(args.optimizer_file, optimizer)
-    optimizer.add_hook(chainer.optimizer.WeightDecay(weight_decay))
-    optimizer.use_cleargrads() # TODO: 必要？
+    optimizer.add_hook(chainer.optimizer.WeightDecay(WEIGHT_DECAY))
+    optimizer.use_cleargrads()
 
     train_dataset = load_catalog(args.train_catalog_file)
     cv_dataset = load_catalog(args.cv_catalog_file)
@@ -187,13 +178,17 @@ def train_model(args):
 
     logs = []
     for iter_count in six.moves.range(1, args.iteration+1):
-        if str(iter_count) in learning_schedules:
-            optimizer.lr = learning_schedules[str(iter_count)]
+        if str(iter_count) in LR_SCHEDULES:
+            optimizer.lr = LR_SCHEDULES[str(iter_count)]
 
         batch_dataset = np.random.choice(train_dataset, args.batch_size)
         train_loss = perform_train(model, optimizer, batch_dataset)
         print('mini-batch:%d %s' % (iter_count, model.loss_log))
 
+        if not os.path.exists(SAVE_DIR):
+            os.makedirs(SAVE_DIR)
+            save_learning_params(args)
+    
         if (iter_count == 1) or (iter_count == args.iteration) or (iter_count % 100 == 0):
             cv_loss, cv_map = perform_cv(model, optimizer, cv_dataset)
             print('iter:%d trian loss:%f cv loss:%f map:%f' %

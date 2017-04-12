@@ -247,36 +247,3 @@ def nms(candidates):
         else:
             winners.append(box1)
     return winners
-
-"""
-def final_detection(grid_box, real_width, real_height):
-    grid_size = INPUT_SIZE / N_GRID
-    box = Box(x=((grid_box.left * grid_size * real_width / INPUT_SIZE) - (grid_box.width * real_width / 2)),
-              y=((grid_box.top * grid_size * real_height / INPUT_SIZE) - (grid_box.height * real_height / 2)),
-              width=grid_box.width * real_width,
-              height=grid_box.height * real_height,
-              clazz=grid_box.clazz,
-              objectness=grid_box.objectness)
-    box.x = max(0., box.left)
-    box.y = max(0., box.top)
-    box.width = min(box.width, real_width - box.left)
-    box.height = min(box.height, real_height - box.top)
-    return box
-
-def __detection(self, px, py, pw, ph, pconf, pprob):
-    batch_size = px.data.shape[0]
-    _px = F.reshape(px, (batch_size, N_GRID, N_GRID)).data
-    _py = F.reshape(py, (batch_size, N_GRID, N_GRID)).data
-    _pw = F.reshape(pw, (batch_size, N_GRID, N_GRID)).data
-    _ph = F.reshape(ph, (batch_size, N_GRID, N_GRID)).data
-    _pconf = F.reshape(pconf, (batch_size, N_GRID, N_GRID)).data
-    _pprob = pprob.data
-
-    detections = []
-    for i in range(0, batch_size):
-        candidates = self.__select_candidates(
-            _px[i], _py[i], _pw[i], _ph[i], _pconf[i], _pprob[i], self.class_prob_thresh)
-        winners = self.__nms(candidates, self.iou_thresh)
-        detections.append(winners)
-    return detections
-"""

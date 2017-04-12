@@ -117,7 +117,7 @@ class YoloDetector(chainer.Chain):
 
         # fully connection layers
         h = F.leaky_relu(self.fc1(h), slope=0.1)
-        h = F.dropout(h, train=self.train, ratio=0.5)
+        h = F.dropout(h, train=self.train, ratio=DROPOUT_RATIO)
         h = self.fc2(h)
 
         # normalize and reshape predicted tensors
@@ -145,12 +145,12 @@ class YoloDetector(chainer.Chain):
         tprob[class_map] = 1.0
 
         # 学習係数を、オブジェクトが存在するグリッドか否かで調整
-        box_scale_factor = np.tile(0.1, tconf.shape).astype(np.float32)
-        box_scale_factor[tconf == 1.0] = 5.0
-        conf_scale_factor = np.tile(0.2, tconf.shape).astype(np.float32)
-        conf_scale_factor[tconf == 1.0] = 1.0
+        box_scale_factor = np.tile(SCALE_FACTORS['nocoord'], tconf.shape).astype(np.float32)
+        box_scale_factor[tconf == 1.0] = SCALE_FACTORS['coord']
+        conf_scale_factor = np.tile(SCALE_FACTORS['noobj'], tconf.shape).astype(np.float32)
+        conf_scale_factor[tconf == 1.0] = SCALE_FACTORS['obj']
         prob_scale_factor = np.tile(0.0, tconf.shape).astype(np.float32)
-        prob_scale_factor[tconf == 1.0] = 2.0
+        prob_scale_factor[tconf == 1.0] = SCALE_FACTORS['prob']
 
         # 損失誤差を算出
         tx, ty, tw, th = self.to_variable(tx), self.to_variable(ty), self.to_variable(tw), self.to_variable(th)
