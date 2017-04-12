@@ -1,3 +1,4 @@
+snapshot_*/
 .DS_Store
 *.npz
 *.model
