@@ -170,8 +170,7 @@ class YoloDetector(chainer.Chain):
                          (x_loss.data / batch_size, y_loss.data / batch_size,
                           w_loss.data / batch_size, h_loss.data / batch_size,
                           conf_loss.data / batch_size, prob_loss.data / batch_size))
-        self.loss = (x_loss + y_loss + w_loss + h_loss + conf_loss + prob_loss) / batch_size
-#        self.loss = prob_loss / batch_size
+        self.loss = x_loss + y_loss + w_loss + h_loss + conf_loss + prob_loss
 
         self.h = self.from_variable(h)
         if self.train:

@@ -19,10 +19,15 @@ import chainer.links as L
 
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'lib'))
 from config import *
-from yolo import *
+from yolo2 import *
 from image_process import *
 
 xp = np
+
+learning_rate = 0.001
+lr_decay_power = 2
+momentum = 0.9
+weight_decay = 0.0005
 
 def load_catalog(catalog_file):
     try:
@@ -77,11 +82,14 @@ def train_model(args):
         chainer.serializers.load_npz(args.model_file, model)
 
     # TODO: 本学習に合わせてMomentum SGDに変更する？
-    optimizer = chainer.optimizers.Adam()
+#    optimizer = chainer.optimizers.Adam()
+    optimizer = chainer.optimizers.MomentumSGD(lr=learning_rate, momentum=momentum)
     optimizer.setup(model)
     if len(args.optimizer_file) > 0:
         print('load optimizer: %s' % args.optimizer_file)
         chainer.serializers.load_npz(args.optimizer_file, optimizer)
+    optimizer.add_hook(chainer.optimizer.WeightDecay(weight_decay))
+    optimizer.use_cleargrads()
 
     train_dataset = load_catalog(args.train_catalog_file)
     cv_dataset = load_catalog(args.cv_catalog_file)
@@ -102,14 +110,20 @@ def train_model(args):
                 'train_loss': str(train_loss), 'train_acc': str(train_acc),
                 'cv_loss': str(cv_loss), 'cv_acc': str(cv_acc)
             })
-#            chainer.serializers.save_npz('classifier_iter{}.model'.format(str(iter_count).zfill(5)), model)
-#            chainer.serializers.save_npz('classifier_iter{}.state'.format(str(iter_count).zfill(5)), optimizer)
+
+            df_logs = pd.DataFrame(logs,
+                columns=['iteration', 'train_loss', 'train_acc', 'cv_loss', 'cv_acc'])
+            with open('train_log.csv', 'w') as fp:
+                df_logs.to_csv(fp, encoding='cp932', index=False)
+
+        if iter_count % 1000 == 0:
+            chainer.serializers.save_npz('classifier_iter{}.model'.format(str(iter_count).zfill(5)), model)
+            chainer.serializers.save_npz('classifier_iter{}.state'.format(str(iter_count).zfill(5)), optimizer)
+
+        # polynomial decay learning rate
+        optimizer.lr = learning_rate * ((1-iter_count/5000.0) ** lr_decay_power)
 
     if len(train_dataset) > 0:
-        df_logs = pd.DataFrame(logs,
-            columns=['iteration', 'train_loss', 'train_acc', 'cv_loss', 'cv_acc'])
-        with open('train_log.csv', 'w') as fp:
-            df_logs.to_csv(fp, encoding='cp932', index=False)
         chainer.serializers.save_npz('classifier_final.model', model)
         chainer.serializers.save_npz('classifier_final.state', optimizer)
 

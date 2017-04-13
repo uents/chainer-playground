@@ -21,7 +21,7 @@ import chainer.links as L
 
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'lib'))
 from config import *
-from yolo import *
+from yolo2 import *
 from bounding_box import *
 from image_process import *
 
@@ -168,8 +168,7 @@ def train_model(args):
         print('load model: %s' % (args.model_file))
         chainer.serializers.load_npz(args.model_file, model)
 
-    optimizer = chainer.optimizers.MomentumSGD(
-        lr=LR_SCHEDULES['1'], momentum=MOMENTUM)
+    optimizer = chainer.optimizers.MomentumSGD(lr=LR_SCHEDULES['1'], momentum=MOMENTUM)
     optimizer.setup(model)
     if len(args.optimizer_file) > 0:
         print('load optimizer: %s' % (args.optimizer_file))
