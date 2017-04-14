@@ -21,14 +21,15 @@ import chainer.links as L
 
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'lib'))
 from config import *
-from yolo2 import *
+from yolo import *
 from bounding_box import *
 from image_process import *
 
-SAVE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                        'snapshot_' + dt.datetime.now().strftime('%Y-%m-%d_%H%M%S'))
 xp = np
 
+START_TIME = dt.datetime.now().strftime('%Y-%m-%d_%H%M%S')
+SAVE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                        'snapshot_' + START_TIME)
 
 def load_catalog(catalog_file):
     try:
@@ -141,6 +142,10 @@ def perform_cv(model, optimizer, dataset):
 
 def save_learning_params(args):
     params = {
+        'elapsed_time': {
+            'start': START_TIME,
+            'end': dt.datetime.now().strftime('%Y-%m-%d_%H%M%S')
+        },
         'catalog_file': {
             'train': args.train_catalog_file,
             'cv': args.cv_catalog_file
@@ -202,17 +207,24 @@ def train_model(args):
                 'train_loss': str(train_loss), 'train_map': str(0.0),
                 'cv_loss': str(cv_loss), 'cv_map': str(cv_map)
             })
-#            chainer.serializers.save_npz('detector_iter{}.model'.format(str(iter_count).zfill(5)), model)
-#            chainer.serializers.save_npz('detector_iter{}.state'.format(str(iter_count).zfill(5)), optimizer)
 
             df_logs = pd.DataFrame(logs,
                 columns=['iteration', 'train_loss', 'train_map', 'cv_loss', 'cv_map'])
             with open(os.path.join(SAVE_DIR, 'train_log.csv'), 'w') as fp:
                 df_logs.to_csv(fp, encoding='cp932', index=False)
 
+        if iter_count % 1000 == 0:
+            chainer.serializers.save_npz(
+                os.path.join(SAVE_DIR, 'detector_iter{}.model'.format(str(iter_count).zfill(5))), model)
+            chainer.serializers.save_npz(
+                os.path.join(SAVE_DIR, 'detector_iter{}.state'.format(str(iter_count).zfill(5))), model)
+
     if len(train_dataset) > 0:
         chainer.serializers.save_npz(os.path.join(SAVE_DIR, 'detector_final.model'), model)
         chainer.serializers.save_npz(os.path.join(SAVE_DIR, 'detector_final.state'), optimizer)
+
+    save_learning_params(args)
+
 
 def parse_arguments():
     description = 'YOLO Detection Trainer'

@@ -8,6 +8,7 @@ import os
 import argparse
 import math
 import random
+import datetime as dt
 import numpy as np
 import cv2
 import json
@@ -19,12 +20,16 @@ import chainer.links as L
 
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'lib'))
 from config import *
-from yolo2 import *
+from yolo import *
 from image_process import *
 
 xp = np
 
-learning_rate = 0.001
+START_TIME = dt.datetime.now().strftime('%Y-%m-%d_%H%M%S')
+SAVE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                        'snapshot_' + START_TIME)
+
+learning_rate = 0.01
 lr_decay_power = 2
 momentum = 0.9
 weight_decay = 0.0005
@@ -73,8 +78,8 @@ def perform_cv(model, optimizer, dataset):
     return loss, acc
 
 def train_model(args):
-    print('train: gpu:%d iteration:%d batch_size:%d' %
-        (args.gpu, args.iteration, args.batch_size))
+    print('train: gpu:%d iteration:%d batch_size:%d save_dir:%s' % \
+          (args.gpu, args.iteration, args.batch_size, os.path.split(SAVE_DIR)[1]))
 
     model = YoloClassifier(args.gpu)
     if len(args.model_file) > 0:
@@ -101,6 +106,9 @@ def train_model(args):
         train_loss, train_acc = perform_train(model, optimizer, batch_dataset)
         print('mini-batch:%d loss:%f acc:%f' % (iter_count, train_loss, train_acc))
 
+        if not os.path.exists(SAVE_DIR):
+            os.makedirs(SAVE_DIR)
+    
         if (iter_count == 1) or (iter_count == args.iteration) or (iter_count % 100 == 0):
             cv_loss, cv_acc = perform_cv(model, optimizer, cv_dataset)
             print('iter:%d trian loss:%f acc:%f cv loss:%f acc:%f' %
@@ -113,19 +121,22 @@ def train_model(args):
 
             df_logs = pd.DataFrame(logs,
                 columns=['iteration', 'train_loss', 'train_acc', 'cv_loss', 'cv_acc'])
-            with open('train_log.csv', 'w') as fp:
+            with open(os.path.join(SAVE_DIR, 'train_log.csv'), 'w') as fp:
                 df_logs.to_csv(fp, encoding='cp932', index=False)
 
-        if iter_count % 1000 == 0:
-            chainer.serializers.save_npz('classifier_iter{}.model'.format(str(iter_count).zfill(5)), model)
-            chainer.serializers.save_npz('classifier_iter{}.state'.format(str(iter_count).zfill(5)), optimizer)
+        if iter_count % 500 == 0:
+            chainer.serializers.save_npz(
+                os.path.join(SAVE_DIR, 'classifier_iter{}.model'.format(str(iter_count).zfill(5))), model)
+            chainer.serializers.save_npz(
+                os.path.join(SAVE_DIR, 'classifier_iter{}.state'.format(str(iter_count).zfill(5))), model)
 
         # polynomial decay learning rate
         optimizer.lr = learning_rate * ((1-iter_count/5000.0) ** lr_decay_power)
 
     if len(train_dataset) > 0:
-        chainer.serializers.save_npz('classifier_final.model', model)
-        chainer.serializers.save_npz('classifier_final.state', optimizer)
+        chainer.serializers.save_npz(os.path.join(SAVE_DIR, 'classifier_final.model'), model)
+        chainer.serializers.save_npz(os.path.join(SAVE_DIR, 'classifier_final.state'), optimizer)
+
 
 def parse_arguments():
     description = 'YOLO Classifier'

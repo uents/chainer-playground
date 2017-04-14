@@ -87,8 +87,8 @@ class YoloDetector(chainer.Chain):
             conv6  = L.Convolution2D(None, 1024, ksize=3, stride=1, pad=1),
             conv7  = L.Convolution2D(None, 1024, ksize=3, stride=1, pad=1),
             conv8  = L.Convolution2D(None, 1024, ksize=3, stride=1, pad=1),
-            fc1  = L.Linear(50176, 4096), # (1024,7,7)=50176
-            fc2  = L.Linear(None, ((N_BOXES*5)+N_CLASSES) * (N_GRID**2))
+            fc9    = L.Linear(50176, 4096), # (1024,7,7)=50176
+            fc10   = L.Linear(4096, ((N_BOXES*5)+N_CLASSES) * (N_GRID**2))
         )
         self.gpu = -1
         if gpu >= 0:
@@ -116,9 +116,9 @@ class YoloDetector(chainer.Chain):
         h = F.leaky_relu(self.conv8(h), slope=0.1)
 
         # fully connection layers
-        h = F.leaky_relu(self.fc1(h), slope=0.1)
+        h = F.leaky_relu(self.fc9(h), slope=0.1)
         h = F.dropout(h, train=self.train, ratio=DROPOUT_RATIO)
-        h = self.fc2(h)
+        h = self.fc10(h)
 
         # normalize and reshape predicted tensors
         h = F.sigmoid(h)
@@ -132,6 +132,7 @@ class YoloDetector(chainer.Chain):
         h = self.forward(x)
         px, py, pw, ph, pconf, pprob \
             = F.split_axis(h, indices_or_sections=(1,2,3,4,5), axis=1)
+
         # 教師データを抽出
         tx, ty, tw, th, tconf, tprob \
             = np.array_split(self.from_variable(t), indices_or_sections=(1,2,3,4,5), axis=1)
@@ -139,6 +140,7 @@ class YoloDetector(chainer.Chain):
         # オブジェクトが存在しないグリッドは、グリッド中心とする
         tx[tconf != 1.] = 0.5
         ty[tconf != 1.] = 0.5
+
         # オブジェクトが存在しないグリッドは、学習させない(誤差を相殺する)
         class_map = (tprob == 1.0)
         tprob = self.from_variable(pprob)

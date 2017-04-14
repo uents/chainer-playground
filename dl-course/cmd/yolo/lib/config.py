@@ -17,11 +17,11 @@ N_CLASSES = 26  # 0..25
 
 # training configurations
 MOMENTUM = 0.9
-WEIGHT_DECAY = 0.01
+WEIGHT_DECAY = 0.005
 LR_SCHEDULES = {
-    '1' : 1e-6,
-    '500' : 1e-5,
-    '10000' : 1e-6,
+    '1' : 1e-5,
+    '500' : 1e-4,
+    '10000' : 1e-5,
 }
 
 DROPOUT_RATIO = 0.5
