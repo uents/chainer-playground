@@ -186,7 +186,8 @@ def train_model(args):
     print('number of dataset: train:%d cv:%d' % (len(train_dataset), len(cv_dataset)))
 
     logs = []
-    for iter_count in six.moves.range(1, args.iteration+1):
+    for iter_count in six.moves.range(args.start_iter_count,
+                                      args.start_iter_count+args.iteration):
         if str(iter_count) in LR_SCHEDULES:
             optimizer.lr = LR_SCHEDULES[str(iter_count)]
 
@@ -234,8 +235,9 @@ def parse_arguments():
     parser.add_argument('--train-catalog-file', type=str, dest='train_catalog_file', default='')
     parser.add_argument('--cv-catalog-file', type=str, dest='cv_catalog_file', default='')
     parser.add_argument('--gpu', '-g', type=int, default=-1)
-    parser.add_argument('--iteration', '-i', type=int, dest='iteration', default=1)
     parser.add_argument('--batchsize', '-b', type=int, dest='batch_size', default=20)
+    parser.add_argument('--iteration', '-i', type=int, dest='iteration', default=1)
+    parser.add_argument('--start-iteration-count', '-s', type=int, dest='start_iter_count', default=1)
     return parser.parse_args()
 
 if __name__ == '__main__':

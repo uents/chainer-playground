@@ -118,10 +118,10 @@ class YoloDetector(chainer.Chain):
         # fully connection layers
         h = F.leaky_relu(self.fc9(h), slope=0.1)
         h = F.dropout(h, train=self.train, ratio=DROPOUT_RATIO)
-        h = self.fc10(h)
+        h = F.leaky_relu(self.fc10(h), slope=0.1)
 
         # normalize and reshape predicted tensors
-        h = F.sigmoid(h)
+#        h = F.sigmoid(h)
         h = F.reshape(h, (batch_size, (5*N_BOXES)+N_CLASSES, N_GRID, N_GRID))
         return h
 
@@ -168,11 +168,11 @@ class YoloDetector(chainer.Chain):
         conf_loss = F.sum(conf_scale_factor * ((tconf - pconf) ** 2))
         prob_loss = F.sum(prob_scale_factor * F.reshape(F.sum(((tprob - pprob) ** 2), axis=1), prob_scale_factor.shape))
 
-        self.loss_log = ("loss x:%03.4f y:%03.4f w:%03.4f h:%03.4f conf:%03.4f prob:%03.4f" %
-                         (x_loss.data / batch_size, y_loss.data / batch_size,
+        self.loss = x_loss + y_loss + w_loss + h_loss + conf_loss + prob_loss
+        self.loss_log = ("loss %3.4f x:%03.4f y:%03.4f w:%03.4f h:%03.4f conf:%03.4f prob:%03.4f" %
+                         (self.loss, x_loss.data / batch_size, y_loss.data / batch_size,
                           w_loss.data / batch_size, h_loss.data / batch_size,
                           conf_loss.data / batch_size, prob_loss.data / batch_size))
-        self.loss = x_loss + y_loss + w_loss + h_loss + conf_loss + prob_loss
 
         self.h = self.from_variable(h)
         if self.train:
