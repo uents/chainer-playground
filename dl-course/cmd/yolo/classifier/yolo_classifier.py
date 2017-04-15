@@ -20,7 +20,7 @@ import chainer.links as L
 
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'lib'))
 from config import *
-from yolo2 import *
+from yolo_v2 import *
 from image_process import *
 
 xp = np
@@ -86,7 +86,6 @@ def train_model(args):
         print('load model: %s' % args.model_file)
         chainer.serializers.load_npz(args.model_file, model)
 
-    # TODO: 本学習に合わせてMomentum SGDに変更する？
 #    optimizer = chainer.optimizers.Adam()
     optimizer = chainer.optimizers.MomentumSGD(lr=learning_rate, momentum=momentum)
     optimizer.setup(model)
@@ -111,7 +110,7 @@ def train_model(args):
     
         if (iter_count == 1) or (iter_count == args.iteration) or (iter_count % 100 == 0):
             cv_loss, cv_acc = perform_cv(model, optimizer, cv_dataset)
-            print('iter:%d trian loss:%f acc:%f cv loss:%f acc:%f' %
+            print('iter:%d train loss:%f acc:%f cv loss:%f acc:%f' %
                 (iter_count, train_loss, train_acc, cv_loss, cv_acc))
             logs.append({
                 'iteration': str(iter_count),

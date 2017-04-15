@@ -8,7 +8,7 @@ import os
 
 # network configurations
 INPUT_SIZE = 224
-N_BOXES = 1
+N_BOXES = 5
 N_GRID = 7
 N_CLASSES = 26  # 0..25
                 # F.softmax_cross_entropy()で扱うラベルが

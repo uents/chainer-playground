@@ -18,7 +18,7 @@ import chainer.links as L
 
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'lib'))
 from config import *
-from yolo2 import *
+from yolo_v2 import *
 
 
 def copy_conv_layer(src, dst):
