@@ -18,7 +18,7 @@ import chainer.links as L
 
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'lib'))
 from config import *
-from yolo import *
+from yolo2 import *
 
 
 def copy_conv_layer(src, dst):
@@ -26,6 +26,22 @@ def copy_conv_layer(src, dst):
         src_layer = eval('src.conv%d' % i)
         dst_layer = eval('dst.conv%d' % i)
         dst_layer.W = src_layer.W
+        dst_layer.b = src_layer.b
+
+def copy_bn_layer(src, dst):
+    for i in range(1, N_CNN_LAYER+1):
+        src_layer = eval("src.bn%d" % i)
+        dst_layer = eval("dst.bn%d" % i)        
+        dst_layer.N = src_layer.N
+        dst_layer.avg_var = src_layer.avg_var
+        dst_layer.avg_mean = src_layer.avg_mean
+        dst_layer.gamma = src_layer.gamma
+        dst_layer.eps = src_layer.eps
+
+def copy_bias_layer(src, dst):
+    for i in range(1, N_CNN_LAYER+1):
+        src_layer = eval("src.bias%d" % i)
+        dst_layer = eval("dst.bias%d" % i)        
         dst_layer.b = src_layer.b
 
 def parse_arguments():
@@ -55,6 +71,8 @@ if __name__ == '__main__':
     dummy_image = chainer.Variable(np.random.rand(1, 3, INPUT_SIZE, INPUT_SIZE).astype(np.float32))
     detector_model.forward(dummy_image)
     copy_conv_layer(classifier_model, detector_model)
+    copy_bn_layer(classifier_model, detector_model)
+    copy_bias_layer(classifier_model, detector_model)
 
     print('save model')
     chainer.serializers.save_npz(args.output_model_file, detector_model)

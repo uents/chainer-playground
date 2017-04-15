@@ -8,6 +8,7 @@ import os
 import argparse
 import math
 import random
+import pprint
 import itertools
 import datetime as dt
 import numpy as np
@@ -21,11 +22,12 @@ import chainer.links as L
 
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'lib'))
 from config import *
-from yolo import *
+from yolo2 import *
 from bounding_box import *
 from image_process import *
 
 xp = np
+pp = pprint.PrettyPrinter(indent=2)
 
 START_TIME = dt.datetime.now().strftime('%Y-%m-%d_%H%M%S')
 SAVE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)),
@@ -91,7 +93,8 @@ def average_precisions(positives):
     return [precision(p['true'], p['false']) for p in positives]
 
 def mean_average_precision(positives):
-    print('precision:{}'.format([(i, pos) for i, pos in enumerate(positives, 0)]))
+    print('precision:')
+    pp.pprint([(i, pos) for i, pos in enumerate(positives, 0)])
     aps = average_precisions(positives)
     return np.asarray(aps).mean()
 
@@ -218,7 +221,7 @@ def train_model(args):
             chainer.serializers.save_npz(
                 os.path.join(SAVE_DIR, 'detector_iter{}.model'.format(str(iter_count).zfill(5))), model)
             chainer.serializers.save_npz(
-                os.path.join(SAVE_DIR, 'detector_iter{}.state'.format(str(iter_count).zfill(5))), model)
+                os.path.join(SAVE_DIR, 'detector_iter{}.state'.format(str(iter_count).zfill(5))), optimizer)
 
     if len(train_dataset) > 0:
         chainer.serializers.save_npz(os.path.join(SAVE_DIR, 'detector_final.model'), model)

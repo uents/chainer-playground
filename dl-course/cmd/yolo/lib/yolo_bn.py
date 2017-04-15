@@ -30,23 +30,18 @@ class YoloClassifier(chainer.Chain):
             conv1  = L.Convolution2D(None, 32, ksize=3, stride=1, pad=1, nobias=True),
             bn1    = L.BatchNormalization(32, use_beta=False, eps=2e-5),
             bias1  = L.Bias(shape=(32,)),
-
             conv2  = L.Convolution2D(None, 64, ksize=3, stride=1, pad=1, nobias=True),
             bn2    = L.BatchNormalization(64, use_beta=False, eps=2e-5),
             bias2  = L.Bias(shape=(64,)),
-
             conv3  = L.Convolution2D(None, 128, ksize=3, stride=1, pad=1, nobias=True),
             bn3    = L.BatchNormalization(128, use_beta=False, eps=2e-5),
             bias3  = L.Bias(shape=(128,)),
-
             conv4  = L.Convolution2D(None, 256, ksize=3, stride=1, pad=1, nobias=True),
             bn4    = L.BatchNormalization(256, use_beta=False, eps=2e-5),
             bias4  = L.Bias(shape=(256,)),
-
             conv5  = L.Convolution2D(None, 512, ksize=3, stride=1, pad=1, nobias=True),
             bn5    = L.BatchNormalization(512, use_beta=False, eps=2e-5),
             bias5  = L.Bias(shape=(512,)),
-
             conv6  = L.Convolution2D(None, 1024, ksize=3, stride=1, pad=1, nobias=True),
             bn6    = L.BatchNormalization(1024, use_beta=False, eps=2e-5),
             bias6  = L.Bias(shape=(1024,)),
@@ -66,15 +61,15 @@ class YoloClassifier(chainer.Chain):
         # convolution layers
         h = F.leaky_relu(self.bias1(self.bn1(self.conv1(x), test=not self.train)), slope=0.1)
         h = F.max_pooling_2d(h, ksize=2, stride=2, pad=0) # 112
-        h = F.leaky_relu(self.bias2(self.bn2(self.conv2(x), test=not self.train)), slope=0.1)
+        h = F.leaky_relu(self.bias2(self.bn2(self.conv2(h), test=not self.train)), slope=0.1)
         h = F.max_pooling_2d(h, ksize=2, stride=2, pad=0) # 56
-        h = F.leaky_relu(self.bias3(self.bn3(self.conv3(x), test=not self.train)), slope=0.1)
+        h = F.leaky_relu(self.bias3(self.bn3(self.conv3(h), test=not self.train)), slope=0.1)
         h = F.max_pooling_2d(h, ksize=2, stride=2, pad=0) # 28
-        h = F.leaky_relu(self.bias4(self.bn4(self.conv4(x), test=not self.train)), slope=0.1)
+        h = F.leaky_relu(self.bias4(self.bn4(self.conv4(h), test=not self.train)), slope=0.1)
         h = F.max_pooling_2d(h, ksize=2, stride=2, pad=0) # 14
-        h = F.leaky_relu(self.bias5(self.bn5(self.conv5(x), test=not self.train)), slope=0.1)
+        h = F.leaky_relu(self.bias5(self.bn5(self.conv5(h), test=not self.train)), slope=0.1)
         h = F.max_pooling_2d(h, ksize=2, stride=2, pad=0) # 7
-        h = F.leaky_relu(self.bias6(self.bn6(self.conv6(x), test=not self.train)), slope=0.1)
+        h = F.leaky_relu(self.bias6(self.bn6(self.conv6(h), test=not self.train)), slope=0.1)
 
         # additional layers for pretraining
         h = self.conv7(h)
@@ -97,16 +92,36 @@ class YoloDetector(chainer.Chain):
     def __init__(self, gpu=-1):
         super(YoloDetector, self).__init__(
 #            conv1  = L.Convolution2D(3,      16, ksize=3, stride=1, pad=1),
-            conv1  = L.Convolution2D(None,   32, ksize=3, stride=1, pad=1),
-            conv2  = L.Convolution2D(None,   64, ksize=3, stride=1, pad=1),
-            conv3  = L.Convolution2D(None,  128, ksize=3, stride=1, pad=1),
-            conv4  = L.Convolution2D(None,  256, ksize=3, stride=1, pad=1),
-            conv5  = L.Convolution2D(None,  512, ksize=3, stride=1, pad=1),
-            conv6  = L.Convolution2D(None, 1024, ksize=3, stride=1, pad=1),
-            conv7  = L.Convolution2D(None, 1024, ksize=3, stride=1, pad=1),
-            conv8  = L.Convolution2D(None, 1024, ksize=3, stride=1, pad=1),
-            fc9    = L.Linear(50176, 4096), # (1024,7,7)=50176
-            fc10   = L.Linear(4096, ((N_BOXES*5)+N_CLASSES) * (N_GRID**2))
+
+            conv1  = L.Convolution2D(None, 32, ksize=3, stride=1, pad=1, nobias=True),
+            bn1    = L.BatchNormalization(32, use_beta=False, eps=2e-5),
+            bias1  = L.Bias(shape=(32,)),
+            conv2  = L.Convolution2D(None, 64, ksize=3, stride=1, pad=1, nobias=True),
+            bn2    = L.BatchNormalization(64, use_beta=False, eps=2e-5),
+            bias2  = L.Bias(shape=(64,)),
+            conv3  = L.Convolution2D(None, 128, ksize=3, stride=1, pad=1, nobias=True),
+            bn3    = L.BatchNormalization(128, use_beta=False, eps=2e-5),
+            bias3  = L.Bias(shape=(128,)),
+            conv4  = L.Convolution2D(None, 256, ksize=3, stride=1, pad=1, nobias=True),
+            bn4    = L.BatchNormalization(256, use_beta=False, eps=2e-5),
+            bias4  = L.Bias(shape=(256,)),
+            conv5  = L.Convolution2D(None, 512, ksize=3, stride=1, pad=1, nobias=True),
+            bn5    = L.BatchNormalization(512, use_beta=False, eps=2e-5),
+            bias5  = L.Bias(shape=(512,)),
+            conv6  = L.Convolution2D(None, 1024, ksize=3, stride=1, pad=1, nobias=True),
+            bn6    = L.BatchNormalization(1024, use_beta=False, eps=2e-5),
+            bias6  = L.Bias(shape=(1024,)),
+            conv7  = L.Convolution2D(None, 1024, ksize=3, stride=1, pad=1, nobias=True),
+            bn7    = L.BatchNormalization(1024, use_beta=False, eps=2e-5),
+            bias7  = L.Bias(shape=(1024,)),
+            conv8  = L.Convolution2D(3072, 1024, ksize=3, stride=1, pad=1, nobias=True),
+            bn8    = L.BatchNormalization(1024, use_beta=False, eps=2e-5),
+            bias8  = L.Bias(shape=(1024,)),
+
+            conv9  = L.Convolution2D(None, (N_BOXES*5)+N_CLASSES, ksize=3, stride=1, pad=1, nobias=True),
+            bias9  = L.Bias(shape=((N_BOXES*5)+N_CLASSES,)),
+#            fc9    = L.Linear(50176, 2048), # (1024,7,7)=50176
+#            fc10   = L.Linear(2048, ((N_BOXES*5)+N_CLASSES) * (N_GRID**2)),
         )
         self.gpu = -1
         if gpu >= 0:
@@ -118,27 +133,35 @@ class YoloDetector(chainer.Chain):
         batch_size = x.data.shape[0]
 
         # convolution layers
-        h = F.leaky_relu(self.conv1(x), slope=0.1)
+        h = F.leaky_relu(self.bias1(self.bn1(self.conv1(x), test=not self.train)), slope=0.1)
         h = F.max_pooling_2d(h, ksize=2, stride=2, pad=0) # 112
-        h = F.leaky_relu(self.conv2(h), slope=0.1)
+
+        h = F.leaky_relu(self.bias2(self.bn2(self.conv2(h), test=not self.train)), slope=0.1)
         h = F.max_pooling_2d(h, ksize=2, stride=2, pad=0) # 56
-        h = F.leaky_relu(self.conv3(h), slope=0.1)
+
+        h = F.leaky_relu(self.bias3(self.bn3(self.conv3(h), test=not self.train)), slope=0.1)
         h = F.max_pooling_2d(h, ksize=2, stride=2, pad=0) # 28
-        h = F.leaky_relu(self.conv4(h), slope=0.1)
+
+        h = F.leaky_relu(self.bias4(self.bn4(self.conv4(h), test=not self.train)), slope=0.1)
         h = F.max_pooling_2d(h, ksize=2, stride=2, pad=0) # 14
-        h = F.leaky_relu(self.conv5(h), slope=0.1)
+
+        h = F.leaky_relu(self.bias5(self.bn5(self.conv5(h), test=not self.train)), slope=0.1)
+        high_res_feature = reorg(h)
         h = F.max_pooling_2d(h, ksize=2, stride=2, pad=0) # 7
-        h = F.leaky_relu(self.conv6(h), slope=0.1)
-        h = F.leaky_relu(self.conv7(h), slope=0.1)
-        h = F.leaky_relu(self.conv8(h), slope=0.1)
+
+        h = F.leaky_relu(self.bias6(self.bn6(self.conv6(h), test=not self.train)), slope=0.1)
+        h = F.leaky_relu(self.bias7(self.bn7(self.conv7(h), test=not self.train)), slope=0.1)
+        h = F.concat((high_res_feature, h), axis=1) # output concatination
+        h = F.leaky_relu(self.bias8(self.bn8(self.conv8(h), test=not self.train)), slope=0.1)
+        h = self.bias9(self.conv9(h))
 
         # fully connection layers
-        h = F.leaky_relu(self.fc9(h), slope=0.1)
-        h = F.dropout(h, train=self.train, ratio=DROPOUT_RATIO)
-        h = F.leaky_relu(self.fc10(h), slope=0.1)
+#        h = F.leaky_relu(self.fc9(h), slope=0.1)
+#        h = F.dropout(h, train=self.train, ratio=DROPOUT_RATIO)
+#        h = F.leaky_relu(self.fc10(h), slope=0.1)
 
         # normalize and reshape predicted tensors
-#        h = F.sigmoid(h)
+        h = F.sigmoid(h)
         h = F.reshape(h, (batch_size, (5*N_BOXES)+N_CLASSES, N_GRID, N_GRID))
         return h
 
@@ -187,7 +210,7 @@ class YoloDetector(chainer.Chain):
 
         self.loss = x_loss + y_loss + w_loss + h_loss + conf_loss + prob_loss
         self.loss_log = ("loss %3.4f x:%03.4f y:%03.4f w:%03.4f h:%03.4f conf:%03.4f prob:%03.4f" %
-                         (self.loss, x_loss.data / batch_size, y_loss.data / batch_size,
+                         (self.loss.data, x_loss.data / batch_size, y_loss.data / batch_size,
                           w_loss.data / batch_size, h_loss.data / batch_size,
                           conf_loss.data / batch_size, prob_loss.data / batch_size))
 
@@ -209,3 +232,13 @@ class YoloDetector(chainer.Chain):
         if self.gpu >= 0:
             v = chainer.cuda.to_gpu(v)
         return chainer.Variable(v)
+
+
+def reorg(input, stride=2):
+    batch_size, in_channel, in_height, in_width = input.data.shape
+    out_height, out_width, out_channel \
+        = int(in_height/stride), int(in_width/stride), in_channel*stride*stride
+    output = F.transpose(F.reshape(input, (batch_size, in_channel, out_height, stride, out_width, stride)), (0, 1, 2, 4, 3, 5)) 
+    output = F.transpose(F.reshape(output, (batch_size, in_channel, out_height, out_width, -1)), (0, 4, 1, 2, 3)) 
+    output = F.reshape(output, (batch_size, out_channel, out_height, out_width))
+    return output

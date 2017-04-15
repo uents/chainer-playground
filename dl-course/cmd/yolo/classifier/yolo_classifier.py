@@ -20,7 +20,7 @@ import chainer.links as L
 
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'lib'))
 from config import *
-from yolo import *
+from yolo2 import *
 from image_process import *
 
 xp = np
@@ -128,7 +128,7 @@ def train_model(args):
             chainer.serializers.save_npz(
                 os.path.join(SAVE_DIR, 'classifier_iter{}.model'.format(str(iter_count).zfill(5))), model)
             chainer.serializers.save_npz(
-                os.path.join(SAVE_DIR, 'classifier_iter{}.state'.format(str(iter_count).zfill(5))), model)
+                os.path.join(SAVE_DIR, 'classifier_iter{}.state'.format(str(iter_count).zfill(5))), optimizer)
 
         # polynomial decay learning rate
         optimizer.lr = learning_rate * ((1-iter_count/5000.0) ** lr_decay_power)
