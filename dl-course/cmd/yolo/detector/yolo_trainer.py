@@ -199,6 +199,8 @@ def train_model(args):
             optimizer.lr = LR_SCHEDULES[str(iter_count)]
 
         batch_dataset = np.random.choice(train_dataset, args.batch_size)
+        model.iter_count = iter_count
+
         train_loss = perform_train(model, optimizer, batch_dataset)
         print('mini-batch:%d %s' % (iter_count, model.loss_log))
 
@@ -206,8 +208,7 @@ def train_model(args):
             os.makedirs(SAVE_DIR)
             save_learning_params(args)
     
-        if (iter_count == 10) or (iter_count == 20) or \
-           (iter_count % 100 == 0) or (iter_count == args.iteration):
+        if (iter_count == 10) or (iter_count % 100 == 0) or (iter_count == args.iteration):
             cv_loss, cv_map = perform_cv(model, optimizer, cv_dataset)
             print('iter:%d trian loss:%f cv loss:%f map:%f' %
                 (iter_count, train_loss, cv_loss, cv_map))
@@ -222,7 +223,7 @@ def train_model(args):
             with open(os.path.join(SAVE_DIR, 'train_log.csv'), 'w') as fp:
                 df_logs.to_csv(fp, encoding='cp932', index=False)
 
-        if iter_count % 1000 == 0:
+        if iter_count == 100 or iter_count % 1000 == 0:
             chainer.serializers.save_npz(
                 os.path.join(SAVE_DIR, 'detector_iter{}.model'.format(str(iter_count).zfill(5))), model)
             chainer.serializers.save_npz(

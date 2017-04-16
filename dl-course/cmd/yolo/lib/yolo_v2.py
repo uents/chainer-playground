@@ -6,6 +6,7 @@ from __future__ import print_function
 import six
 import sys
 import os
+#import pprint
 import numpy as np
 
 import chainer
@@ -16,8 +17,9 @@ sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '
 from config import *
 from bounding_box import *
 
-N_CNN_LAYER = 18
+#pp = pprint.PrettyPrinter(indent=2)
 
+N_CNN_LAYER = 18
 
 class YoloClassifier(chainer.Chain):
     '''
@@ -237,6 +239,7 @@ class YoloDetector(chainer.Chain):
             self.gpu = gpu
             self.to_gpu()
         self.train = False
+        self.iter_count = 1
 
     def forward(self, x):
         batch_size = x.data.shape[0]
@@ -319,63 +322,71 @@ class YoloDetector(chainer.Chain):
         box_scale_factor = np.tile(SCALE_FACTORS['nocoord'], tconf.shape).astype(np.float32)
         conf_scale_factor = np.tile(SCALE_FACTORS['noconf'], tconf.shape).astype(np.float32)
 
-        # 一定以上のIOUを持つanchorに対する教師データのconfidence scoreは下げない
-        best_ious = []
-        for batch in range(0, batch_size):
-            ious = []
-            pboxes = self.all_pred_boxes(px.data[batch], py.data[batch], pw.data[batch], ph.data[batch])
-            for truth_box in ground_truths[batch]:
-                tboxes = Box(
-                    x=np.broadcast_to(np.array(truth_box.left).astype(np.float32), pboxes.left.shape),
-                    y=np.broadcast_to(np.array(truth_box.top).astype(np.float32), pboxes.top.shape),
-                    width=np.broadcast_to(np.array(truth_box.width).astype(np.float32), pboxes.width.shape),
-                    height=np.broadcast_to(np.array(truth_box.height).astype(np.float32), pboxes.height.shape)
-                )
-                ious.append(Box.iou(pboxes, tboxes))
-            ious = np.asarray(ious)
-            best_ious.append(np.max(ious, axis=0))
+        if self.iter_count >= 30:
+            # 一定以上のIOUを持つanchorに対する教師データのconfidence scoreは下げない
+            best_ious = []
+            for batch in range(0, batch_size):
+                ious = []
+                pboxes = self.all_pred_boxes(px.data[batch], py.data[batch], pw.data[batch], ph.data[batch])
+                for truth_box in ground_truths[batch]:
+                    tboxes = Box(
+                        x=np.broadcast_to(np.array(truth_box.left).astype(np.float32), pboxes.left.shape),
+                        y=np.broadcast_to(np.array(truth_box.top).astype(np.float32), pboxes.top.shape),
+                        width=np.broadcast_to(np.array(truth_box.width).astype(np.float32), pboxes.width.shape),
+                        height=np.broadcast_to(np.array(truth_box.height).astype(np.float32), pboxes.height.shape)
+                    )
+                    ious.append(Box.iou(pboxes, tboxes))
+                ious = np.asarray(ious)
+                best_ious.append(np.max(ious, axis=0))
 
-        best_ious = np.asarray(best_ious).reshape(batch_size, N_BOXES, 1, N_GRID, N_GRID)
-        _pconf = pconf.data
-        if self.gpu >= 0: _pconf = _pconf.get()
-        tconf[best_ious > IOU_THRESH] = _pconf[best_ious > IOU_THRESH]
-        conf_scale_factor[best_ious > IOU_THRESH] = 0
+            best_ious = np.asarray(best_ious).reshape(batch_size, N_BOXES, 1, N_GRID, N_GRID)
+            _pconf = pconf.data
+            if self.gpu >= 0: _pconf = _pconf.get()
+            tconf[best_ious > CONFIDENCE_KEEP_THRESH] \
+                = _pconf[best_ious > CONFIDENCE_KEEP_THRESH]
+            conf_scale_factor[best_ious > CONFIDENCE_KEEP_THRESH] = 0.
 
-        # objectに最も近いanchor boxに対する教師データをground truthに近づける
-        for batch in range(0, batch_size):
-            for truth_box in ground_truths[batch]:
-                truth_index = 0
-                best_iou = 0.
-                for anchor_index, anchor_box in enumerate(ANCHOR_BOXES, 0):
-                    iou = Box.iou(Box(0., 0., truth_box.width, truth_box.height),
+            # objectに最も近いanchor boxに対する教師データをground truthに近づける
+            pred_ious = [] # ログ出力用
+            for batch in range(0, batch_size):
+                for truth_box in ground_truths[batch]:
+                    truth_index = 0
+                    best_iou = 0.
+                    for anchor_index, anchor_box in enumerate(ANCHOR_BOXES, 0):
+                        iou = Box.iou(Box(0., 0., truth_box.width, truth_box.height),
                                   Box(0., 0., anchor_box[0], anchor_box[1]))
-                    if iou > best_iou:
-                        best_iou = iou
-                        truth_index = anchor_index
+                        if iou > best_iou:
+                            best_iou = iou
+                            truth_index = anchor_index
 
-                anchor_w = ANCHOR_BOXES[truth_index][0]
-                anchor_h = ANCHOR_BOXES[truth_index][1]
-                grid_x = int(math.modf(truth_box.center.x)[1])
-                grid_y = int(math.modf(truth_box.center.y)[1])
-                tx[batch, truth_index, :, grid_y, grid_x] = math.modf(truth_box.center.x)[0]
-                ty[batch, truth_index, :, grid_y, grid_x] = math.modf(truth_box.center.y)[0]
-                tw[batch, truth_index, :, grid_y, grid_x] = np.log(truth_box.width / anchor_w)
-                th[batch, truth_index, :, grid_y, grid_x] = np.log(truth_box.height / anchor_h)
-                box_scale_factor[batch, truth_index, :, grid_y, grid_x] = SCALE_FACTORS['coord']
+                    anchor_w = ANCHOR_BOXES[truth_index][0]
+                    anchor_h = ANCHOR_BOXES[truth_index][1]
+                    
+                    grid_x = int(math.modf(truth_box.center.x)[1])
+                    grid_y = int(math.modf(truth_box.center.y)[1])
+                    tx[batch, truth_index, :, grid_y, grid_x] = math.modf(truth_box.center.x)[0]
+                    ty[batch, truth_index, :, grid_y, grid_x] = math.modf(truth_box.center.y)[0]
+                    tw[batch, truth_index, :, grid_y, grid_x] = np.log(truth_box.width / anchor_w)
+                    th[batch, truth_index, :, grid_y, grid_x] = np.log(truth_box.height / anchor_h)
+                    box_scale_factor[batch, truth_index, :, grid_y, grid_x] = SCALE_FACTORS['coord']
 
-                pred_w = np.exp(pw.data.get()[batch, truth_index, 0, grid_y, grid_x]) * anchor_w
-                pred_h = np.exp(ph.data.get()[batch, truth_index, 0, grid_y, grid_x]) * anchor_h
-                pred_x = max(grid_x + px.data.get()[batch, truth_index, 0, grid_y, grid_x] - pred_w/2., 0.)
-                pred_y = max(grid_y + py.data.get()[batch, truth_index, 0, grid_y, grid_x] - pred_h/2., 0.)
-                pred_w = min(pred_w, N_GRID - pred_w)
-                pred_h = min(pred_h, N_GRID - pred_h)
-                pred_box = Box(x=pred_x, y=pred_y, width=pred_w, height=pred_h)
-                pred_iou = Box.iou(pred_box, truth_box)
-                tconf[batch, truth_index, :, grid_y, grid_x] = pred_iou
-                conf_scale_factor[batch, truth_index, :, grid_y, grid_x] = SCALE_FACTORS['conf']
+                    pred_w = np.exp(pw.data.get()[batch, truth_index, 0, grid_y, grid_x]) * anchor_w
+                    pred_h = np.exp(ph.data.get()[batch, truth_index, 0, grid_y, grid_x]) * anchor_h
+                    pred_x = max(grid_x + px.data.get()[batch, truth_index, 0, grid_y, grid_x] - pred_w/2., 0.)
+                    pred_y = max(grid_y + py.data.get()[batch, truth_index, 0, grid_y, grid_x] - pred_h/2., 0.)
+                    pred_w = min(pred_w, N_GRID - pred_w)
+                    pred_h = min(pred_h, N_GRID - pred_h)
+                    pred_box = Box(x=pred_x, y=pred_y, width=pred_w, height=pred_h)
+                    pred_iou = Box.iou(pred_box, truth_box)
+                    pred_ious.append(pred_iou)
+                    tconf[batch, truth_index, :, grid_y, grid_x] = pred_iou
+                    conf_scale_factor[batch, truth_index, :, grid_y, grid_x] = SCALE_FACTORS['conf']
 
-                tprob[batch, truth_index, :, grid_y, grid_x] = 0.
-                tprob[batch, truth_index, int(truth_box.clazz), grid_y, grid_x] = 1.
+                    tprob[batch, truth_index, :, grid_y, grid_x] = 0.
+                    tprob[batch, truth_index, int(truth_box.clazz), grid_y, grid_x] = 1.
+
+            if self.train:
+                print(np.asarray(pred_ious).ravel())
                 
         # 損失誤差を算出
         tx, ty, tw, th = self.to_variable(tx), self.to_variable(ty), \
