@@ -59,19 +59,19 @@ def load_dataset(image_paths, truth_boxes):
     truth_boxes = [item['truth'] for item in dataset]
     return images, truth_boxes
 
-def boxes_to_tensor(boxes):
-    each_tensor = [encode_box_tensor(box) for box in boxes]
-    return reduce(lambda x, y: x + y, each_tensor)
+#def boxes_to_tensor(boxes):
+#    each_tensor = [encode_box_tensor(box) for box in boxes]
+#    return reduce(lambda x, y: x + y, each_tensor)
 
-def tensor_to_boxes(tensor):
-    return nms(select_candidates(tensor))
+#def tensor_to_boxes(tensor):
+#    return nms(select_candidates(tensor))
 
 def init_positives():
     return [{'true': 0, 'false': 0}  for i in range(0, N_CLASSES)]
 
-def count_positives(predicted_boxes, truth_boxes):
+def count_positives(pred_boxes, truth_boxes):
     positives = init_positives()
-    for pred_box in predicted_boxes:
+    for pred_box in pred_boxes:
         correct, iou = Box.correct(pred_box, truth_boxes)
         if correct:
             positives[int(pred_box.clazz)]['true'] += 1
@@ -134,11 +134,13 @@ def perform_cv(model, optimizer, dataset):
         model.train = False
         model(xs, ts)
         loss += model.loss.data * len(ix) / n_valid
+        px, py, pw, ph, pconf, pprob = model.h
 
         for batch in six.moves.range(0, len(ix)):
-            pred_boxes = nms(select_candidates(model.h[batch]))
+            pred_boxes = nms(select_candidates(px[batch], py[batch], pw[batch], ph[batch],
+                                               pconf[batch], pprob[batch]))
             positives = add_positives(positives, count_positives(pred_boxes, truth_boxes[batch]))
-            for pred_box, truth_box in itertools.product(predicted_boxes, truth_boxes[batch]):
+            for pred_box, truth_box in itertools.product(pred_boxes, truth_boxes[batch]):
                 correct, iou = Box.correct(pred_box, [truth_box])
                 print('{0} {1} {2:.3f} pred:{3} truth:{4}'.format(
                     count + batch + 1, correct, iou, pred_box, truth_box))
@@ -204,7 +206,8 @@ def train_model(args):
             os.makedirs(SAVE_DIR)
             save_learning_params(args)
     
-        if (iter_count == 1) or (iter_count % 100 == 0) or (iter_count == args.iteration):
+        if (iter_count == 10) or (iter_count == 20) or \
+           (iter_count % 100 == 0) or (iter_count == args.iteration):
             cv_loss, cv_map = perform_cv(model, optimizer, cv_dataset)
             print('iter:%d trian loss:%f cv loss:%f map:%f' %
                 (iter_count, train_loss, cv_loss, cv_map))

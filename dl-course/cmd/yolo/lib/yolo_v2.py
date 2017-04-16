@@ -151,6 +151,7 @@ class YoloDetector(chainer.Chain):
     YOLO Detector
     '''
     def __init__(self, gpu=-1):
+        initializer = chainer.initializers.HeNormal()
         super(YoloDetector, self).__init__(
             # common layers with Darknet-19
             conv1  = L.Convolution2D(3, 32, ksize=3, stride=1, pad=1, nobias=True),
@@ -214,17 +215,21 @@ class YoloDetector(chainer.Chain):
             bias18 = L.Bias(shape=(1024,)),
 
             # detection layers
-            conv19 = L.Convolution2D(None, 1024,  ksize=3, stride=1, pad=1, nobias=True),
+            conv19 = L.Convolution2D(None, 1024,  ksize=3, stride=1, pad=1, nobias=True,
+                                     initialW=initializer),
             bn19   = L.BatchNormalization(1024, use_beta=False, eps=2e-5),
             bias19 = L.Bias(shape=(1024,)),
-            conv20 = L.Convolution2D(None, 1024, ksize=3, stride=1, pad=1, nobias=True),
+            conv20 = L.Convolution2D(None, 1024, ksize=3, stride=1, pad=1, nobias=True,
+                                     initialW=initializer),
             bn20   = L.BatchNormalization(1024, use_beta=False, eps=2e-5),
             bias20 = L.Bias(shape=(1024,)),
-            conv21 = L.Convolution2D(None, 1024, ksize=3, stride=1, pad=1, nobias=True),
+            conv21 = L.Convolution2D(None, 1024, ksize=3, stride=1, pad=1, nobias=True,
+                                     initialW=initializer),
             bn21   = L.BatchNormalization(1024, use_beta=False, eps=2e-5),
             bias21 = L.Bias(shape=(1024,)),
             
-            conv22 = L.Convolution2D(None, N_BOXES * (5+N_CLASSES), ksize=1, stride=1, pad=0, nobias=True),
+            conv22 = L.Convolution2D(None, N_BOXES * (5+N_CLASSES), ksize=1, stride=1, pad=0, nobias=True,
+                                     initialW=initializer),
             bias22 = L.Bias(shape=(N_BOXES* (5+N_CLASSES),)),
         )
         self.gpu = -1
@@ -257,7 +262,7 @@ class YoloDetector(chainer.Chain):
         h = F.leaky_relu(self.bias11(self.bn11(self.conv11(h), test=not self.train)), slope=0.1)
         h = F.leaky_relu(self.bias12(self.bn12(self.conv12(h), test=not self.train)), slope=0.1)
         h = F.leaky_relu(self.bias13(self.bn13(self.conv13(h), test=not self.train)), slope=0.1)
-        # TODO: high resolution classifier
+        high_res_feature = self.reorg(h)
         h = F.max_pooling_2d(h, ksize=2, stride=2, pad=0)
         
         h = F.leaky_relu(self.bias14(self.bn14(self.conv14(h), test=not self.train)), slope=0.1)
@@ -268,11 +273,24 @@ class YoloDetector(chainer.Chain):
 
         h = F.leaky_relu(self.bias19(self.bn19(self.conv19(h), test=not self.train)), slope=0.1)
         h = F.leaky_relu(self.bias20(self.bn20(self.conv20(h), test=not self.train)), slope=0.1)
-        # TODO: high resolution classifier
+        h = F.concat((high_res_feature, h), axis=1)
         h = F.leaky_relu(self.bias21(self.bn21(self.conv21(h), test=not self.train)), slope=0.1)
 
         h = self.bias22(self.conv22(h))
         return h
+
+    def reorg(self, h, stride=2):
+        batch_size, in_channel, in_height, in_width = h.data.shape
+        out_height, out_width, out_channel \
+            = int(in_height/stride), int(in_width/stride), in_channel*stride*stride
+        out = F.transpose(
+            F.reshape(h, (batch_size, in_channel, out_height, stride, out_width, stride)),
+            (0, 1, 2, 4, 3, 5)) 
+        out = F.transpose(
+            F.reshape(out, (batch_size, in_channel, out_height, out_width, -1)),
+            (0, 4, 1, 2, 3))
+        out = F.reshape(out, (batch_size, out_channel, out_height, out_width))
+        return out
 
     def __call__(self, h, ground_truths):
         batch_size = h.data.shape[0]
@@ -282,14 +300,19 @@ class YoloDetector(chainer.Chain):
         h = F.reshape(h, (batch_size, N_BOXES, 5+N_CLASSES, N_GRID, N_GRID))
         px, py, pw, ph, pconf, pprob \
             = F.split_axis(h, indices_or_sections=(1,2,3,4,5), axis=2)
+        px = F.sigmoid(px)
+        py = F.sigmoid(py)
+#        pw = pw - F.broadcast_to(F.expand_dims(F.logsumexp(pw, axis=1), 1), pw.shape)
+#        ph = ph - F.broadcast_to(F.expand_dims(F.logsumexp(ph, axis=1), 1), ph.shape)
         pconf = F.sigmoid(pconf)
+        pprob = F.sigmoid(pprob)
 
         # 教師データを初期化
-        tx = np.tile(0.5, px.shape) # 基本は0.5 (グリッド中心)
-        ty = np.tile(0.5, py.shape)
-        tw = np.zeros(ph.shape) # 基本は0 (e^t,e^h = 1となるように)
-        th = np.zeros(ph.shape)
-        tconf = np.zeros(pconf.shape) # 基本は0
+        tx = np.tile(0.5, px.shape).astype(np.float32) # 基本は0.5 (グリッド中心)
+        ty = np.tile(0.5, py.shape).astype(np.float32) # 基本は0.5 (グリッド中心)
+        tw = np.zeros(ph.shape).astype(np.float32) # 基本は0.0 (e^t = 1.0となるように)
+        th = np.zeros(ph.shape).astype(np.float32)
+        tconf = np.zeros(pconf.shape).astype(np.float32) # 基本は0.0
         tprob = pprob.data.copy() # 真のグリッド以外は損失誤差が発生しないよう推定値をコピー
 
         # scaling factorを初期化
@@ -309,10 +332,13 @@ class YoloDetector(chainer.Chain):
                     height=np.broadcast_to(np.array(truth_box.height).astype(np.float32), pboxes.height.shape)
                 )
                 ious.append(Box.iou(pboxes, tboxes))
-            best_ious.append(np.asarray(ious))
+            ious = np.asarray(ious)
+            best_ious.append(np.max(ious, axis=0))
 
         best_ious = np.asarray(best_ious).reshape(batch_size, N_BOXES, 1, N_GRID, N_GRID)
-        tconf[best_ious > IOU_THRESH] = pconf.data.copy()[best_ious > IOU_THRESH]
+        _pconf = pconf.data
+        if self.gpu >= 0: _pconf = _pconf.get()
+        tconf[best_ious > IOU_THRESH] = _pconf[best_ious > IOU_THRESH]
         conf_scale_factor[best_ious > IOU_THRESH] = 0
 
         # objectに最も近いanchor boxに対する教師データをground truthに近づける
@@ -340,11 +366,11 @@ class YoloDetector(chainer.Chain):
                 box_scale_factor[batch, truth_index, :, grid_y, grid_x] = SCALE_FACTORS['coord']
                 
                 pred_box = Box(
-                    x=px.data[batch, truth_index, 0, grid_y, grid_x] + grid_x,
-                    y=py.data[batch, truth_index, 0, grid_y, grid_x] + grid_y,
-                    width=(np.exp(pw.data[batch, truth_index, 0, grid_y, grid_x]) \
+                    x=px.data.get()[batch, truth_index, 0, grid_y, grid_x] + grid_x,
+                    y=py.data.get()[batch, truth_index, 0, grid_y, grid_x] + grid_y,
+                    width=(np.exp(pw.data.get()[batch, truth_index, 0, grid_y, grid_x]) \
                            * ANCHOR_BOXES[truth_index][0]),
-                    height=(np.exp(ph.data[batch, truth_index, 0, grid_y, grid_x]) \
+                    height=(np.exp(ph.data.get()[batch, truth_index, 0, grid_y, grid_x]) \
                            * ANCHOR_BOXES[truth_index][1])
                 )
                 pred_iou = Box.iou(pred_box, truth_box)
@@ -371,7 +397,9 @@ class YoloDetector(chainer.Chain):
                           loss_w.data / batch_size, loss_h.data / batch_size,
                           loss_conf.data / batch_size, loss_prob.data / batch_size))
 
-        self.h = self.from_variable(h)
+        self.h = (self.from_variable(px), self.from_variable(py),
+                  self.from_variable(pw), self.from_variable(ph), 
+                  self.from_variable(pconf), self.from_variable(pprob))
         if self.train:
             return self.loss
         else:
@@ -381,14 +409,17 @@ class YoloDetector(chainer.Chain):
         batch_size = x.shape[0]
         h = self.forward(x)
         h = F.reshape(h, (batch_size, N_BOXES, 5+N_CLASSES, N_GRID, N_GRID))
-        return self.from_variable(h)
+        h = self.from_variable(h)
+        return h.data.get()
 
     def all_pred_boxes(self, px, py, pw, ph):
         x_offsets = np.broadcast_to(np.arange(N_GRID).astype(np.float32), px.shape)
         y_offsets = np.broadcast_to(np.arange(N_GRID).astype(np.float32), py.shape)
         w_anchors = np.broadcast_to(np.reshape(np.array(ANCHOR_BOXES).astype(np.float32)[:,0], (N_BOXES,1,1,1)), pw.shape)
         h_anchors = np.broadcast_to(np.reshape(np.array(ANCHOR_BOXES).astype(np.float32)[:,0], (N_BOXES,1,1,1)), ph.shape)
-        return Box(x=x_offsets + F.sigmoid(px).data, y=y_offsets + F.sigmoid(py).data,
+        if self.gpu >= 0:
+            px, py, pw, ph = px.get(), py.get(), pw.get(), ph.get()
+        return Box(x=px + x_offsets, y=py + y_offsets,
                    width=np.exp(pw) * w_anchors, height=np.exp(ph) * h_anchors)
 
     def from_variable(self, v):
@@ -399,3 +430,4 @@ class YoloDetector(chainer.Chain):
         if self.gpu >= 0:
             v = chainer.cuda.to_gpu(v)
         return chainer.Variable(v)
+

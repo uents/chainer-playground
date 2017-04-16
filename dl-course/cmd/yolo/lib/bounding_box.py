@@ -130,10 +130,10 @@ def yolo_to_grid_coord(box):
 
 # [grid_size, grid_size] => [input_size, input_size]
 def grid_to_yolo_coord(box, grid_cell):
-    x = box.left * INPUT_SIZE / GRID_SIZE
-    y = box.top * INPUT_SIZE / GRID_SIZE
-    w = box.width * INPUT_SIZE / GRID_SIZE
-    h = box.height * INPUT_SIZE / GRID_SIZE
+    x = box.left * INPUT_SIZE / N_GRID
+    y = box.top * INPUT_SIZE / N_GRID
+    w = box.width * INPUT_SIZE / N_GRID
+    h = box.height * INPUT_SIZE / N_GRID
     return Box(x=x, y=y, width=w, height=h,
                confidence=box.confidence, clazz=box.clazz,
                objectness=box.objectness)
@@ -209,14 +209,8 @@ def decode_box_tensor(tensor):
     return boxes
 
 # 検出候補のBounding Boxを選定
-def select_candidates(tensors):
-    def extract_from_each_anchor_box(tensor, anchor_box):
-        px, py, pw, ph, pconf, pprob \
-            = np.array_split(tensor, indices_or_sections=(1,2,3,4,5), axis=0)
-        px = F.sigmoid(px).data
-        py = F.sigmoid(py).data
-        pconf = F.sigmoid(pconf).data
-
+def select_candidates(pxs, pys, pws, phs, pconfs, pprobs):
+    def extract_from_each_anchor_box(px, py, pw, ph, pconf, pprob, anchor_box):
         # グリッド毎のクラス確率を算出 (N_CLASSES, N_GRID, N_GRID)
         class_prob_map = pprob * pconf
         # 最大クラス確率となるクラスラベルを抽出 (N_GRID, N_GRID)
@@ -229,21 +223,23 @@ def select_candidates(tensors):
 
         candidates = []
         for i in six.moves.range(0, candidate_map.sum()):
-            w = np.exp(pw[candidate_map][i]) * anchor_box[0]
-            h = np.epx(ph[candidate_map][i]) * anchor_box[1]
-            x = max(px[candidate_map][i] + grid_cell.x - w/2, 0.)
-            y = max(py[candidate_map][i] + grid_cell.y - h/2, 0.)
+            w = np.exp(pw[0][candidate_map][i]) * anchor_box[0]
+            h = np.exp(ph[0][candidate_map][i]) * anchor_box[1]
+            x = max(px[0][candidate_map][i] + grid_cells[i].x - w/2, 0.)
+            y = max(py[0][candidate_map][i] + grid_cells[i].y - h/2, 0.)
             w = min(w, N_GRID - x)
             h = min(h, N_GRID - y)
             grid_box = Box(x=x, y=y, width=w, height=h,
-                           confidence=pconf[candidate_map][i],
+                           confidence=pconf[0][candidate_map][i],
                            clazz=class_label_map[candidate_map][i],
                            objectness=class_prob_map.max(axis=0)[candidate_map][i])
+#            print(grid_box)
             candidates.append(grid_to_yolo_coord(grid_box, grid_cells[i]))
         return candidates
 
-    all_candidates = [extract_from_each_anchor_box(tensor, anchor_box)
-                      for tensor, anchor_box in zip(tensors, ANCHOR_BOXES)]
+    all_candidates = [extract_from_each_anchor_box(px, py, pw, ph, pconf, pprob, anchor_box)
+                      for px, py, pw, ph, pconf, pprob, anchor_box
+                      in zip(pxs, pys, pws, phs, pconfs, pprobs, ANCHOR_BOXES)]
     return reduce(lambda x, y: x + y, all_candidates)
     
 

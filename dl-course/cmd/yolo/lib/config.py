@@ -5,33 +5,29 @@ from __future__ import print_function
 import six
 import sys
 import os
+import numpy as np
 
 # network configurations
 N_CLASSES = 26  # 0..25
                 # F.softmax_cross_entropy()で扱うラベルが
                 # 0始まりの必要があるため、便宜的に0を追加
-INPUT_SIZE = 224
+
 N_GRID = 7
+INPUT_SIZE = N_GRID * 32
+
 N_BOXES = 5
-ANCHOR_BOXES = [[5.375, 5.03125],
-                [5.40625, 4.6875],
-                [2.96875, 2.53125],
-                [2.59375, 2.78125],
-                [1.9375, 3.25]]
+ANCHOR_BOXES = np.array([[5.375, 5.03125],
+                         [5.40625, 4.6875],
+                         [2.96875, 2.53125],
+                         [2.59375, 2.78125],
+                         [1.9375, 3.25]])
 
 # training configurations
 MOMENTUM = 0.9
 WEIGHT_DECAY = 0.05
 LR_SCHEDULES = {
-    '1' : 1e-5,
-    '3001' : 1e-5,
-#    '1' : 1e-7,
-#    '101' : 1e-6,
-#    '301' : 1e-4,
-#    '301' : 1e-5,
-#    '501' : 1e-4,
-#    '5001' : 3e-5,
-#    '10001' : 1e-5,
+    '1' : 1e-6,
+    '501' : 1e-5,
 }
 
 DROPOUT_RATIO = 0.3
