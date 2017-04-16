@@ -15,15 +15,13 @@ N_CLASSES = 26  # 0..25
 N_GRID = 7
 INPUT_SIZE = N_GRID * 32
 
-N_BOXES = 7
-ANCHOR_BOXES = np.array([[5.37510, 5.03125],
-                         [5.40625, 4.68750],
+ANCHOR_BOXES = np.array([[5.375, 5.03125],
+                         [5.40625, 2.6875],
                          [2.96875, 2.53125],
-#                         [2.59375, 2.78125],
-                         [2.59375, 7.88282],
-                         [6.33843, 2.78125],
-                         [1.93754, 3.25843],
-                         [0.67738, 0.57273]])
+                         [1.59375, 1.78125],
+                         [1.2375, 5.25]])
+N_BOXES = int(len(ANCHOR_BOXES))
+
 
 # training configurations
 MOMENTUM = 0.9
@@ -31,6 +29,7 @@ WEIGHT_DECAY = 0.005
 LR_SCHEDULES = {
     '1': 1e-6,
     '101': 1e-5,
+    '4001': 3e-6,
 }
 
 DROPOUT_RATIO = 0.5

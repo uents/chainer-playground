@@ -210,13 +210,13 @@ def decode_box_tensor(tensor):
 
 # 検出候補のBounding Boxを選定
 def select_candidates(pxs, pys, pws, phs, pconfs, pprobs):
-    def extract_from_each_anchor_box(px, py, pw, ph, pconf, pprob, anchor_box):
+    def extract_from_each_anchor(px, py, pw, ph, pconf, pprob, anchor_box):
         # グリッド毎のクラス確率を算出 (N_CLASSES, N_GRID, N_GRID)
         class_prob_map = pprob * pconf
         # 最大クラス確率となるクラスラベルを抽出 (N_GRID, N_GRID)
         class_label_map = class_prob_map.argmax(axis=0)
         # 最大クラス確率が閾値以上のグリッドを検出候補として抽出 (N_GRID, N_GRID)
-        candidate_map = class_prob_map.max(axis=0) > CLASS_PROBABILITY_THRESH
+        candidate_map = class_prob_map.max(axis=0) >= CLASS_PROBABILITY_THRESH
         # 検出候補のグリッド位置を抽出
         grid_cells = [Point(x=float(point[1]), y=float(point[0]))
                       for point in np.argwhere(candidate_map)]
@@ -237,7 +237,7 @@ def select_candidates(pxs, pys, pws, phs, pconfs, pprobs):
             candidates.append(grid_to_yolo_coord(pred_box))
         return candidates
 
-    all_candidates = [extract_from_each_anchor_box(px, py, pw, ph, pconf, pprob, anchor_box)
+    all_candidates = [extract_from_each_anchor(px, py, pw, ph, pconf, pprob, anchor_box)
                       for px, py, pw, ph, pconf, pprob, anchor_box
                       in zip(pxs, pys, pws, phs, pconfs, pprobs, ANCHOR_BOXES)]
     return reduce(lambda x, y: x + y, all_candidates)
@@ -256,7 +256,7 @@ def nms(candidates):
     # TODO: 比較すべきは勝ち残ったBoxかも？
     for i, box1 in enumerate(candidates[1:], 1):
         for box2 in candidates[:i]:
-            if Box.iou(box1, box2) > IOU_THRESH:
+            if Box.iou(box1, box2) >= IOU_THRESH:
                 break
         else:
             winners.append(box1)

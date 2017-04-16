@@ -157,13 +157,16 @@ def save_learning_params(args):
             'train': args.train_catalog_file,
             'cv': args.cv_catalog_file
         },
-        'iteration': args.iteration,
+        'grid_cells': N_GRID,
+        'anchor_boxes': '{}'.format(ANCHOR_BOXES),
+        'max_iterations': args.iteration,
         'batch_size': args.batch_size,
         'momentum': MOMENTUM,
         'weight_decay': WEIGHT_DECAY,
         'lr_schedules': LR_SCHEDULES,
         'dropout_ratio': DROPOUT_RATIO,
         'scale_factors': SCALE_FACTORS,
+        'confidence_keep_thresh': CONFIDENCE_KEEP_THRESH,
         'class_prob_thresh': CLASS_PROBABILITY_THRESH,
         'iou_thresh': IOU_THRESH
     }
@@ -182,11 +185,11 @@ def train_model(args):
 
     optimizer = chainer.optimizers.MomentumSGD(lr=LR_SCHEDULES['1'], momentum=MOMENTUM)
     optimizer.setup(model)
+    optimizer.add_hook(chainer.optimizer.WeightDecay(WEIGHT_DECAY))
+    optimizer.use_cleargrads()
     if len(args.optimizer_file) > 0:
         print('load optimizer: %s' % (args.optimizer_file))
         chainer.serializers.load_npz(args.optimizer_file, optimizer)
-    optimizer.add_hook(chainer.optimizer.WeightDecay(WEIGHT_DECAY))
-    optimizer.use_cleargrads()
 
     train_dataset = load_catalog(args.train_catalog_file)
     cv_dataset = load_catalog(args.cv_catalog_file)
@@ -223,7 +226,7 @@ def train_model(args):
             with open(os.path.join(SAVE_DIR, 'train_log.csv'), 'w') as fp:
                 df_logs.to_csv(fp, encoding='cp932', index=False)
 
-        if iter_count == 100 or iter_count % 1000 == 0:
+        if iter_count % 1000 == 0:
             chainer.serializers.save_npz(
                 os.path.join(SAVE_DIR, 'detector_iter{}.model'.format(str(iter_count).zfill(5))), model)
             chainer.serializers.save_npz(
