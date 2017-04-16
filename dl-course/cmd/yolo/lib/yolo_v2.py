@@ -349,34 +349,34 @@ class YoloDetector(chainer.Chain):
                 for anchor_index, anchor_box in enumerate(ANCHOR_BOXES, 0):
                     iou = Box.iou(Box(0., 0., truth_box.width, truth_box.height),
                                   Box(0., 0., anchor_box[0], anchor_box[1]))
-                    if best_iou < iou:
+                    if iou > best_iou:
                         best_iou = iou
                         truth_index = anchor_index
 
+                anchor_w = ANCHOR_BOXES[truth_index][0]
+                anchor_h = ANCHOR_BOXES[truth_index][1]
                 grid_x = int(math.modf(truth_box.center.x)[1])
                 grid_y = int(math.modf(truth_box.center.y)[1])
                 tx[batch, truth_index, :, grid_y, grid_x] = math.modf(truth_box.center.x)[0]
                 ty[batch, truth_index, :, grid_y, grid_x] = math.modf(truth_box.center.y)[0]
-                tw[batch, truth_index, :, grid_y, grid_x] \
-                    = np.log(truth_box.width / ANCHOR_BOXES[truth_index][0])
-                th[batch, truth_index, :, grid_y, grid_x] \
-                    = np.log(truth_box.height / ANCHOR_BOXES[truth_index][1])
-                tprob[batch, truth_index, :, grid_y, grid_x] = 0.
-                tprob[batch, truth_index, int(truth_box.clazz), grid_y, grid_x] = 1.
+                tw[batch, truth_index, :, grid_y, grid_x] = np.log(truth_box.width / anchor_w)
+                th[batch, truth_index, :, grid_y, grid_x] = np.log(truth_box.height / anchor_h)
                 box_scale_factor[batch, truth_index, :, grid_y, grid_x] = SCALE_FACTORS['coord']
-                
-                pred_box = Box(
-                    x=px.data.get()[batch, truth_index, 0, grid_y, grid_x] + grid_x,
-                    y=py.data.get()[batch, truth_index, 0, grid_y, grid_x] + grid_y,
-                    width=(np.exp(pw.data.get()[batch, truth_index, 0, grid_y, grid_x]) \
-                           * ANCHOR_BOXES[truth_index][0]),
-                    height=(np.exp(ph.data.get()[batch, truth_index, 0, grid_y, grid_x]) \
-                           * ANCHOR_BOXES[truth_index][1])
-                )
+
+                pred_w = np.exp(pw.data.get()[batch, truth_index, 0, grid_y, grid_x]) * anchor_w
+                pred_h = np.exp(ph.data.get()[batch, truth_index, 0, grid_y, grid_x]) * anchor_h
+                pred_x = max(grid_x + px.data.get()[batch, truth_index, 0, grid_y, grid_x] - pred_w/2., 0.)
+                pred_y = max(grid_y + py.data.get()[batch, truth_index, 0, grid_y, grid_x] - pred_h/2., 0.)
+                pred_w = min(pred_w, N_GRID - pred_w)
+                pred_h = min(pred_h, N_GRID - pred_h)
+                pred_box = Box(x=pred_x, y=pred_y, width=pred_w, height=pred_h)
                 pred_iou = Box.iou(pred_box, truth_box)
                 tconf[batch, truth_index, :, grid_y, grid_x] = pred_iou
                 conf_scale_factor[batch, truth_index, :, grid_y, grid_x] = SCALE_FACTORS['conf']
 
+                tprob[batch, truth_index, :, grid_y, grid_x] = 0.
+                tprob[batch, truth_index, int(truth_box.clazz), grid_y, grid_x] = 1.
+                
         # 損失誤差を算出
         tx, ty, tw, th = self.to_variable(tx), self.to_variable(ty), \
                          self.to_variable(tw), self.to_variable(th)

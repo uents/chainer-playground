@@ -129,7 +129,7 @@ def yolo_to_grid_coord(box):
                objectness=box.objectness)
 
 # [grid_size, grid_size] => [input_size, input_size]
-def grid_to_yolo_coord(box, grid_cell):
+def grid_to_yolo_coord(box):
     x = box.left * INPUT_SIZE / N_GRID
     y = box.top * INPUT_SIZE / N_GRID
     w = box.width * INPUT_SIZE / N_GRID
@@ -223,18 +223,18 @@ def select_candidates(pxs, pys, pws, phs, pconfs, pprobs):
 
         candidates = []
         for i in six.moves.range(0, candidate_map.sum()):
-            w = np.exp(pw[0][candidate_map][i]) * anchor_box[0]
-            h = np.exp(ph[0][candidate_map][i]) * anchor_box[1]
-            x = max(px[0][candidate_map][i] + grid_cells[i].x - w/2, 0.)
-            y = max(py[0][candidate_map][i] + grid_cells[i].y - h/2, 0.)
-            w = min(w, N_GRID - x)
-            h = min(h, N_GRID - y)
-            grid_box = Box(x=x, y=y, width=w, height=h,
+            pred_w = np.exp(pw[0][candidate_map][i]) * anchor_box[0]
+            pred_h = np.exp(ph[0][candidate_map][i]) * anchor_box[1]
+            pred_x = max(px[0][candidate_map][i] + grid_cells[i].x - pred_w/2., 0.)
+            pred_y = max(py[0][candidate_map][i] + grid_cells[i].y - pred_h/2., 0.)
+            pred_w = min(pred_w, N_GRID - pred_x)
+            pred_h = min(pred_h, N_GRID - pred_y)
+            pred_box = Box(x=pred_x, y=pred_y, width=pred_w, height=pred_h,
                            confidence=pconf[0][candidate_map][i],
                            clazz=class_label_map[candidate_map][i],
                            objectness=class_prob_map.max(axis=0)[candidate_map][i])
-#            print(grid_box)
-            candidates.append(grid_to_yolo_coord(grid_box, grid_cells[i]))
+#            print(pred_box)
+            candidates.append(grid_to_yolo_coord(pred_box))
         return candidates
 
     all_candidates = [extract_from_each_anchor_box(px, py, pw, ph, pconf, pprob, anchor_box)
