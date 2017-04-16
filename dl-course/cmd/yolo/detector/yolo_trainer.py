@@ -22,7 +22,7 @@ import chainer.links as L
 
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'lib'))
 from config import *
-from yolo2 import *
+from yolo_v2 import *
 from bounding_box import *
 from image_process import *
 
@@ -103,10 +103,11 @@ def perform_train(model, optimizer, dataset):
     real_truth_boxes = np.asarray([[dict_to_box(box) for box in item['bounding_boxes']]
                                     for item in dataset])
     images, truth_boxes = load_dataset(image_paths, real_truth_boxes)
-    truth_tensors = np.asarray([boxes_to_tensor(boxes) for boxes in truth_boxes])
+#    truth_tensors = np.asarray([boxes_to_tensor(boxes) for boxes in truth_boxes])
 
     xs = chainer.Variable(xp.asarray(images).transpose(0,3,1,2).astype(np.float32) / 255.)
-    ts = chainer.Variable(xp.asarray(truth_tensors).astype(np.float32))
+    ts = [[yolo_to_grid_coord(box) for box in boxes] for boxes in truth_boxes]
+#    ts = chainer.Variable(xp.asarray(truth_tensors).astype(np.float32))
 
     model.train = True
     optimizer.update(model, xs, ts)
@@ -124,18 +125,19 @@ def perform_cv(model, optimizer, dataset):
     for count in six.moves.range(0, n_valid, 10):
         ix = np.arange(count, min(count+10, n_valid))
         images, truth_boxes = load_dataset(image_paths[ix], real_truth_boxes[ix])
-        truth_tensors = np.asarray([boxes_to_tensor(boxes) for boxes in truth_boxes])
+#        truth_tensors = np.asarray([boxes_to_tensor(boxes) for boxes in truth_boxes])
 
         xs = chainer.Variable(xp.asarray(images).transpose(0,3,1,2).astype(np.float32) / 255.)
-        ts = chainer.Variable(xp.asarray(truth_tensors).astype(np.float32))
+        ts = [[yolo_to_grid_coord(box) for box in boxes] for boxes in truth_boxes]
+#        ts = chainer.Variable(xp.asarray(truth_tensors).astype(np.float32))
 
         model.train = False
         model(xs, ts)
         loss += model.loss.data * len(ix) / n_valid
 
         for batch in six.moves.range(0, len(ix)):
-            predicted_boxes = tensor_to_boxes(model.h[batch])
-            positives = add_positives(positives, count_positives(predicted_boxes, truth_boxes[batch]))
+            pred_boxes = nms(select_candidates(model.h[batch]))
+            positives = add_positives(positives, count_positives(pred_boxes, truth_boxes[batch]))
             for pred_box, truth_box in itertools.product(predicted_boxes, truth_boxes[batch]):
                 correct, iou = Box.correct(pred_box, [truth_box])
                 print('{0} {1} {2:.3f} pred:{3} truth:{4}'.format(

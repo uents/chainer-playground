@@ -9,6 +9,7 @@ import argparse
 import math
 import random
 import numpy as np
+import chainer.functions as F
 
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'lib'))
 from config import *
@@ -19,7 +20,7 @@ class Point():
         self.y = y
 
     def __repr__(self):
-        return '<Point x:%4.1f y:%4.1f>' % (self.x, self.y)
+        return '<Point x:{} y:{}>'.format(self.x, self.y)
 
 class Box():
     def __init__(self, x, y, width, height,
@@ -33,8 +34,8 @@ class Box():
         self.objectness = objectness
 
     def __repr__(self):
-        return '<Box x:%4.1f y:%4.1f w:%4.1f h:%4.1f c:%2d o:%1.3f>' % \
-            (self.left, self.top, self.width, self.height, int(self.clazz), self.objectness)
+        return '<Box x:{} y:{} w:{} h:{} c:{} o:{}>'.format(
+            self.left, self.top, self.width, self.height, int(self.clazz), self.objectness)
 
     @property
     def right(self):
@@ -44,17 +45,32 @@ class Box():
     def bottom(self):
         return self.top + self.height
 
+    @property
+    def center(self):
+        return Point(x=self.left + self.width / 2.,
+                     y=self.top + self.height / 2.)
+
     def area(self):
-        return float(self.width * self.height)
+        return self.width * self.height
 
     @classmethod
     def overlap(self, box1, box2):
-        left = max(box1.left, box2.left)
-        top = max(box1.top, box2.top)
-        right = min(box1.right, box2.right)
-        bottom = min(box1.bottom, box2.bottom)
-        width = max(0, right - left)
-        height = max(0, bottom - top)
+        if type(box1.left) == np.ndarray:
+            left = F.maximum(box1.left, box2.left).data
+            top = F.maximum(box1.top, box2.top).data
+            right = F.minimum(box1.right, box2.right).data
+            bottom = F.minimum(box1.bottom, box2.bottom).data
+            width = right - left
+            width = F.maximum(np.zeros(width.shape).astype(np.float32), width).data
+            height = bottom - top
+            height = F.maximum(np.zeros(height.shape).astype(np.float32), height).data
+        else:
+            left = max(box1.left, box2.left)
+            top = max(box1.top, box2.top)
+            right = min(box1.right, box2.right)
+            bottom = min(box1.bottom, box2.bottom)
+            width = max(0, right - left)
+            height = max(0, bottom - top)
         return Box(left, top, width, height)
 
     @classmethod
@@ -67,8 +83,7 @@ class Box():
 
     @classmethod
     def iou(self, box1, box2):
-        union = Box.union(box1, box2)
-        return Box.intersection(box1, box2) / Box.union(box1, box2) if union > 0 else 0.0
+        return safe_divide(Box.intersection(box1, box2), Box.union(box1, box2))
 
     @classmethod
     def best_iou(self, pred_box, truth_boxes):
@@ -84,58 +99,54 @@ class Box():
             return False, best_score
         return True, best_score
 
+    
 
-# [real_width, real_height] => [448., 448.]
-# 矩形の始点は矩形左上
+def safe_divide(dividend, divisor):
+    if type(divisor) == np.ndarray:
+        divisor[divisor < 1e-12] = 1e-12
+    else:
+        divisor = 1e-12 if divisor < 1e-12 else divisor
+    return dividend / divisor
+
+# [real_width, real_height] => [input_size, input_size]
 def real_to_yolo_coord(box, width, height):
     x = box.left * INPUT_SIZE / width
     y = box.top * INPUT_SIZE / height
     w = box.width * INPUT_SIZE / width
     h = box.height * INPUT_SIZE / height
     return Box(x=x, y=y, width=w, height=h,
-                confidence=box.confidence,
-                clazz=box.clazz,
-                objectness=box.objectness)
+               confidence=box.confidence, clazz=box.clazz,
+               objectness=box.objectness)
 
-# [448., 448.] => [7., 7.]
-# 矩形の始点は矩形中心
+# [input_size, input_size] => [grid_size, grid_size]
 def yolo_to_grid_coord(box):
-    grid_size = INPUT_SIZE / N_GRID
-    x = (box.left + (box.width / 2.)) / grid_size
-    y = (box.top + (box.height / 2.)) / grid_size
-    w = box.width / INPUT_SIZE
-    h = box.height / INPUT_SIZE
+    x = box.left * N_GRID / INPUT_SIZE
+    y = box.top * N_GRID / INPUT_SIZE
+    w = box.width * N_GRID / INPUT_SIZE
+    h = box.height * N_GRID / INPUT_SIZE
     return Box(x=x, y=y, width=w, height=h,
-                confidence=box.confidence,
-                clazz=box.clazz,
-                objectness=box.objectness)
+               confidence=box.confidence, clazz=box.clazz,
+               objectness=box.objectness)
 
-# [7., 7.] => [448., 448.]
-# 矩形の始点は矩形左上
+# [grid_size, grid_size] => [input_size, input_size]
 def grid_to_yolo_coord(box, grid_cell):
-    grid_size = INPUT_SIZE / N_GRID
-    w = box.width * INPUT_SIZE
-    h = box.height * INPUT_SIZE
-    x = max(((grid_cell.x + box.left) * grid_size) - w / 2., 0.)
-    y = max(((grid_cell.y + box.top) * grid_size) - h / 2., 0.)
-    w = min(w, INPUT_SIZE - x)
-    h = min(h, INPUT_SIZE - y)
+    x = box.left * INPUT_SIZE / GRID_SIZE
+    y = box.top * INPUT_SIZE / GRID_SIZE
+    w = box.width * INPUT_SIZE / GRID_SIZE
+    h = box.height * INPUT_SIZE / GRID_SIZE
     return Box(x=x, y=y, width=w, height=h,
-                confidence=box.confidence,
-                clazz=box.clazz,
-                objectness=box.objectness)
+               confidence=box.confidence, clazz=box.clazz,
+               objectness=box.objectness)
 
-# [448., 448.] => [real_width, real_height]
-# 矩形の始点は矩形左上
+# [input_size, input_size] => [real_width, real_height]
 def yolo_to_real_coord(box, width, height):
     x = box.left * width / INPUT_SIZE
     y = box.top * height / INPUT_SIZE
     w = box.width * width / INPUT_SIZE
     h = box.height * height / INPUT_SIZE
     return Box(x=x, y=y, width=w, height=h,
-                confidence=box.confidence,
-                clazz=box.clazz,
-                objectness=box.objectness)
+               confidence=box.confidence, clazz=box.clazz,
+               objectness=box.objectness)
 
 # YOLO座標系のBox情報をTensor情報に変換
 def encode_box_tensor(yolo_box):
@@ -198,38 +209,45 @@ def decode_box_tensor(tensor):
     return boxes
 
 # 検出候補のBounding Boxを選定
-def select_candidates(tensor):
-    px, py, pw, ph, pconf, pprob \
-        = np.array_split(tensor, indices_or_sections=(1,2,3,4,5), axis=0)
-    px = px.reshape(px.shape[1:])
-    py = py.reshape(py.shape[1:])
-    pw = pw.reshape(pw.shape[1:])
-    ph = ph.reshape(ph.shape[1:])
-    pconf = pconf.reshape(pconf.shape[1:])
+def select_candidates(tensors):
+    def extract_from_each_anchor_box(tensor, anchor_box):
+        px, py, pw, ph, pconf, pprob \
+            = np.array_split(tensor, indices_or_sections=(1,2,3,4,5), axis=0)
+        px = F.sigmoid(px).data
+        py = F.sigmoid(py).data
+        pconf = F.sigmoid(pconf).data
 
-    # グリッド毎のクラス確率を算出 (N_CLASSES, N_GRID, N_GRID)
-    class_prob_map = pprob * pconf
-    # 最大クラス確率となるクラスラベルを抽出 (N_GRID, N_GRID)
-    class_label_map = class_prob_map.argmax(axis=0)
-    # 最大クラス確率が閾値以上のグリッドを検出候補として抽出 (N_GRID, N_GRID)
-    candidate_map = class_prob_map.max(axis=0) > CLASS_PROBABILITY_THRESH
-    # 検出候補のグリッド位置を抽出
-    grid_cells = [Point(x=float(point[1]), y=float(point[0]))
-                    for point in np.argwhere(candidate_map)]
+        # グリッド毎のクラス確率を算出 (N_CLASSES, N_GRID, N_GRID)
+        class_prob_map = pprob * pconf
+        # 最大クラス確率となるクラスラベルを抽出 (N_GRID, N_GRID)
+        class_label_map = class_prob_map.argmax(axis=0)
+        # 最大クラス確率が閾値以上のグリッドを検出候補として抽出 (N_GRID, N_GRID)
+        candidate_map = class_prob_map.max(axis=0) > CLASS_PROBABILITY_THRESH
+        # 検出候補のグリッド位置を抽出
+        grid_cells = [Point(x=float(point[1]), y=float(point[0]))
+                      for point in np.argwhere(candidate_map)]
 
-    candidates = []
-    for i in six.moves.range(0, candidate_map.sum()):
-        grid_box = Box(x=px[candidate_map][i],
-                    y=py[candidate_map][i],
-                    width=pw[candidate_map][i],
-                    height=ph[candidate_map][i],
-                    confidence=pconf[candidate_map][i],
-                    clazz=class_label_map[candidate_map][i],
-                    objectness=class_prob_map.max(axis=0)[candidate_map][i])
-        candidates.append(grid_to_yolo_coord(grid_box, grid_cells[i]))
-    return candidates
+        candidates = []
+        for i in six.moves.range(0, candidate_map.sum()):
+            w = np.exp(pw[candidate_map][i]) * anchor_box[0]
+            h = np.epx(ph[candidate_map][i]) * anchor_box[1]
+            x = max(px[candidate_map][i] + grid_cell.x - w/2, 0.)
+            y = max(py[candidate_map][i] + grid_cell.y - h/2, 0.)
+            w = min(w, N_GRID - x)
+            h = min(h, N_GRID - y)
+            grid_box = Box(x=x, y=y, width=w, height=h,
+                           confidence=pconf[candidate_map][i],
+                           clazz=class_label_map[candidate_map][i],
+                           objectness=class_prob_map.max(axis=0)[candidate_map][i])
+            candidates.append(grid_to_yolo_coord(grid_box, grid_cells[i]))
+        return candidates
 
-# non-maximal supression
+    all_candidates = [extract_from_each_anchor_box(tensor, anchor_box)
+                      for tensor, anchor_box in zip(tensors, ANCHOR_BOXES)]
+    return reduce(lambda x, y: x + y, all_candidates)
+    
+
+# non-maximum supression
 def nms(candidates):
     if len(candidates) == 0:
         return []

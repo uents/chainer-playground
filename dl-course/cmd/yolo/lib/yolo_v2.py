@@ -145,7 +145,11 @@ class YoloClassifier(chainer.Chain):
         else:
             return F.softmax(h)
 
+
 class YoloDetector(chainer.Chain):
+    '''
+    YOLO Detector
+    '''
     def __init__(self, gpu=-1):
         super(YoloDetector, self).__init__(
             # common layers with Darknet-19
@@ -268,58 +272,104 @@ class YoloDetector(chainer.Chain):
         h = F.leaky_relu(self.bias21(self.bn21(self.conv21(h), test=not self.train)), slope=0.1)
 
         h = self.bias22(self.conv22(h))
-        print(h.shape)
         return h
 
-    def __call__(self, x, t):
-        batch_size = t.data.shape[0]
+    def __call__(self, h, ground_truths):
+        batch_size = h.data.shape[0]
 
-        # 推論を実行
-        h = self.forward(x)
+        # 推論を実行し結果を抽出
+        h = self.forward(h)
         h = F.reshape(h, (batch_size, N_BOXES, 5+N_CLASSES, N_GRID, N_GRID))
-        h = F.sigmoid(h)
-
         px, py, pw, ph, pconf, pprob \
-            = F.split_axis(h, indices_or_sections=(1,2,3,4,5), axis=1)
-        # 教師データを抽出
-        tx, ty, tw, th, tconf, tprob \
-            = np.array_split(self.from_variable(t), indices_or_sections=(1,2,3,4,5), axis=1)
+            = F.split_axis(h, indices_or_sections=(1,2,3,4,5), axis=2)
+        pconf = F.sigmoid(pconf)
 
-        # オブジェクトが存在しないグリッドは、グリッド中心とする
-        tx[tconf != 1.] = 0.5
-        ty[tconf != 1.] = 0.5
-        # オブジェクトが存在しないグリッドは、学習させない(誤差を相殺する)
-        class_map = (tprob == 1.0)
-        tprob = self.from_variable(pprob)
-        tprob[class_map] = 1.0
+        # 教師データを初期化
+        tx = np.tile(0.5, px.shape) # 基本は0.5 (グリッド中心)
+        ty = np.tile(0.5, py.shape)
+        tw = np.zeros(ph.shape) # 基本は0 (e^t,e^h = 1となるように)
+        th = np.zeros(ph.shape)
+        tconf = np.zeros(pconf.shape) # 基本は0
+        tprob = pprob.data.copy() # 真のグリッド以外は損失誤差が発生しないよう推定値をコピー
 
-        # 学習係数を、オブジェクトが存在するグリッドか否かで調整
+        # scaling factorを初期化
         box_scale_factor = np.tile(SCALE_FACTORS['nocoord'], tconf.shape).astype(np.float32)
-        box_scale_factor[tconf == 1.0] = SCALE_FACTORS['coord']
-        conf_scale_factor = np.tile(SCALE_FACTORS['noobj'], tconf.shape).astype(np.float32)
-        conf_scale_factor[tconf == 1.0] = SCALE_FACTORS['obj']
-        prob_scale_factor = np.tile(0.0, tconf.shape).astype(np.float32)
-        prob_scale_factor[tconf == 1.0] = SCALE_FACTORS['prob']
+        conf_scale_factor = np.tile(SCALE_FACTORS['noconf'], tconf.shape).astype(np.float32)
+
+        # 一定以上のIOUを持つanchorに対する教師データのconfidence scoreは下げない
+        best_ious = []
+        for batch in range(0, batch_size):
+            ious = []
+            pboxes = self.all_pred_boxes(px.data[batch], py.data[batch], pw.data[batch], ph.data[batch])
+            for truth_box in ground_truths[batch]:
+                tboxes = Box(
+                    x=np.broadcast_to(np.array(truth_box.left).astype(np.float32), pboxes.left.shape),
+                    y=np.broadcast_to(np.array(truth_box.top).astype(np.float32), pboxes.top.shape),
+                    width=np.broadcast_to(np.array(truth_box.width).astype(np.float32), pboxes.width.shape),
+                    height=np.broadcast_to(np.array(truth_box.height).astype(np.float32), pboxes.height.shape)
+                )
+                ious.append(Box.iou(pboxes, tboxes))
+            best_ious.append(np.asarray(ious))
+
+        best_ious = np.asarray(best_ious).reshape(batch_size, N_BOXES, 1, N_GRID, N_GRID)
+        tconf[best_ious > IOU_THRESH] = pconf.data.copy()[best_ious > IOU_THRESH]
+        conf_scale_factor[best_ious > IOU_THRESH] = 0
+
+        # objectに最も近いanchor boxに対する教師データをground truthに近づける
+        for batch in range(0, batch_size):
+            for truth_box in ground_truths[batch]:
+                truth_index = 0
+                best_iou = 0.
+                for anchor_index, anchor_box in enumerate(ANCHOR_BOXES, 0):
+                    iou = Box.iou(Box(0., 0., truth_box.width, truth_box.height),
+                                  Box(0., 0., anchor_box[0], anchor_box[1]))
+                    if best_iou < iou:
+                        best_iou = iou
+                        truth_index = anchor_index
+
+                grid_x = int(math.modf(truth_box.center.x)[1])
+                grid_y = int(math.modf(truth_box.center.y)[1])
+                tx[batch, truth_index, :, grid_y, grid_x] = math.modf(truth_box.center.x)[0]
+                ty[batch, truth_index, :, grid_y, grid_x] = math.modf(truth_box.center.y)[0]
+                tw[batch, truth_index, :, grid_y, grid_x] \
+                    = np.log(truth_box.width / ANCHOR_BOXES[truth_index][0])
+                th[batch, truth_index, :, grid_y, grid_x] \
+                    = np.log(truth_box.height / ANCHOR_BOXES[truth_index][1])
+                tprob[batch, truth_index, :, grid_y, grid_x] = 0.
+                tprob[batch, truth_index, int(truth_box.clazz), grid_y, grid_x] = 1.
+                box_scale_factor[batch, truth_index, :, grid_y, grid_x] = SCALE_FACTORS['coord']
+                
+                pred_box = Box(
+                    x=px.data[batch, truth_index, 0, grid_y, grid_x] + grid_x,
+                    y=py.data[batch, truth_index, 0, grid_y, grid_x] + grid_y,
+                    width=(np.exp(pw.data[batch, truth_index, 0, grid_y, grid_x]) \
+                           * ANCHOR_BOXES[truth_index][0]),
+                    height=(np.exp(ph.data[batch, truth_index, 0, grid_y, grid_x]) \
+                           * ANCHOR_BOXES[truth_index][1])
+                )
+                pred_iou = Box.iou(pred_box, truth_box)
+                tconf[batch, truth_index, :, grid_y, grid_x] = pred_iou
+                conf_scale_factor[batch, truth_index, :, grid_y, grid_x] = SCALE_FACTORS['conf']
 
         # 損失誤差を算出
-        tx, ty, tw, th = self.to_variable(tx), self.to_variable(ty), self.to_variable(tw), self.to_variable(th)
+        tx, ty, tw, th = self.to_variable(tx), self.to_variable(ty), \
+                         self.to_variable(tw), self.to_variable(th)
         tconf, tprob = self.to_variable(tconf), self.to_variable(tprob)
         box_scale_factor = self.to_variable(box_scale_factor)
         conf_scale_factor = self.to_variable(conf_scale_factor)
-        prob_scale_factor = self.to_variable(prob_scale_factor)
 
-        x_loss = F.sum(box_scale_factor * ((tx - px) ** 2))
-        y_loss = F.sum(box_scale_factor * ((ty - py) ** 2))
-        w_loss = F.sum(box_scale_factor * ((tw - pw) ** 2))
-        h_loss = F.sum(box_scale_factor * ((th - ph) ** 2))
-        conf_loss = F.sum(conf_scale_factor * ((tconf - pconf) ** 2))
-        prob_loss = F.sum(prob_scale_factor * F.reshape(F.sum(((tprob - pprob) ** 2), axis=1), prob_scale_factor.shape))
+        loss_x = F.sum(box_scale_factor * ((px - tx) ** 2))
+        loss_y = F.sum(box_scale_factor * ((py - ty) ** 2))
+        loss_w = F.sum(box_scale_factor * ((pw - tw) ** 2))
+        loss_h = F.sum(box_scale_factor * ((ph - th) ** 2))
+        loss_conf = F.sum(conf_scale_factor * ((pconf - tconf) ** 2))
+        loss_prob = F.sum((pprob - tprob) ** 2)
 
-        self.loss = x_loss + y_loss + w_loss + h_loss + conf_loss + prob_loss
+        self.loss = loss_x + loss_y + loss_w + loss_h + loss_conf + loss_prob
         self.loss_log = ("loss %03.4f x:%03.4f y:%03.4f w:%03.4f h:%03.4f conf:%03.4f prob:%03.4f" %
-                         (self.loss.data, x_loss.data / batch_size, y_loss.data / batch_size,
-                          w_loss.data / batch_size, h_loss.data / batch_size,
-                          conf_loss.data / batch_size, prob_loss.data / batch_size))
+                         (self.loss.data, loss_x.data / batch_size, loss_y.data / batch_size,
+                          loss_w.data / batch_size, loss_h.data / batch_size,
+                          loss_conf.data / batch_size, loss_prob.data / batch_size))
 
         self.h = self.from_variable(h)
         if self.train:
@@ -328,8 +378,18 @@ class YoloDetector(chainer.Chain):
             return self.h
 
     def predict(self, x):
+        batch_size = x.shape[0]
         h = self.forward(x)
+        h = F.reshape(h, (batch_size, N_BOXES, 5+N_CLASSES, N_GRID, N_GRID))
         return self.from_variable(h)
+
+    def all_pred_boxes(self, px, py, pw, ph):
+        x_offsets = np.broadcast_to(np.arange(N_GRID).astype(np.float32), px.shape)
+        y_offsets = np.broadcast_to(np.arange(N_GRID).astype(np.float32), py.shape)
+        w_anchors = np.broadcast_to(np.reshape(np.array(ANCHOR_BOXES).astype(np.float32)[:,0], (N_BOXES,1,1,1)), pw.shape)
+        h_anchors = np.broadcast_to(np.reshape(np.array(ANCHOR_BOXES).astype(np.float32)[:,0], (N_BOXES,1,1,1)), ph.shape)
+        return Box(x=x_offsets + F.sigmoid(px).data, y=y_offsets + F.sigmoid(py).data,
+                   width=np.exp(pw) * w_anchors, height=np.exp(ph) * h_anchors)
 
     def from_variable(self, v):
         return chainer.cuda.to_cpu(v.data)

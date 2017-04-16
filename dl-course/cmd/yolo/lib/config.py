@@ -7,12 +7,17 @@ import sys
 import os
 
 # network configurations
-INPUT_SIZE = 224
-N_BOXES = 5
-N_GRID = 7
 N_CLASSES = 26  # 0..25
                 # F.softmax_cross_entropy()で扱うラベルが
                 # 0始まりの必要があるため、便宜的に0を追加
+INPUT_SIZE = 224
+N_GRID = 7
+N_BOXES = 5
+ANCHOR_BOXES = [[5.375, 5.03125],
+                [5.40625, 4.6875],
+                [2.96875, 2.53125],
+                [2.59375, 2.78125],
+                [1.9375, 3.25]]
 
 # training configurations
 MOMENTUM = 0.9
@@ -31,11 +36,10 @@ LR_SCHEDULES = {
 
 DROPOUT_RATIO = 0.3
 SCALE_FACTORS = {
-    'coord': 5.0,
+    'coord': 1.0,
     'nocoord': 0.1,
-    'obj': 1.0,
-    'noobj': 0.1,
-    'prob': 1.0
+    'conf': 5.0,
+    'noconf': 0.1,
 }
 
 # detection configurations
