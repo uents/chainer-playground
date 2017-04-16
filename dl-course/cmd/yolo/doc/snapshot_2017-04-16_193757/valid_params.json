@@ -1,0 +1,31 @@
+{
+  "anchor_boxes": "[[ 5.375    5.03125]\n [ 5.40625  2.6875 ]\n [ 2.96875  2.53125]\n [ 1.59375  1.78125]\n [ 1.2375   5.25   ]]", 
+  "batch_size": 20, 
+  "catalog_file": {
+    "cv": "../../../cache/single_cv150_catalog.json", 
+    "train": "../../../contest/aug/single_aug_5000/single_aug_catalog.json"
+  }, 
+  "class_prob_thresh": 0.3, 
+  "confidence_keep_thresh": 0.6, 
+  "dropout_ratio": 0.5, 
+  "elapsed_time": {
+    "end": "2017-04-16_215212", 
+    "start": "2017-04-16_215206"
+  }, 
+  "grid_cells": 7, 
+  "iou_thresh": 0.3, 
+  "lr_schedules": {
+    "1": 1e-06, 
+    "101": 1e-05, 
+    "4001": 3e-06
+  }, 
+  "max_iterations": 1, 
+  "momentum": 0.9, 
+  "scale_factors": {
+    "conf": 3.0, 
+    "coord": 1.0, 
+    "noconf": 0.1, 
+    "nocoord": 0.1
+  }, 
+  "weight_decay": 0.005
+}
