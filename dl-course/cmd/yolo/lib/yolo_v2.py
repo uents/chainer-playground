@@ -403,9 +403,7 @@ class YoloDetector(chainer.Chain):
                           loss_w.data / batch_size, loss_h.data / batch_size,
                           loss_conf.data / batch_size, loss_prob.data / batch_size))
 
-        self.h = (self.from_variable(px), self.from_variable(py),
-                  self.from_variable(pw), self.from_variable(ph), 
-                  self.from_variable(pconf), self.from_variable(pprob))
+        self.h = self.from_variable(h)
         if self.train:
             return self.loss
         else:

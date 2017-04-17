@@ -42,8 +42,8 @@ class YoloPredictor(chainer.Chain):
 
         # 推論結果をBounding Boxに変換
         bounding_boxes = [inference_to_bounding_boxes(tensor) for tensor in tensors]
-        return [[[{ 'bounding_box': yolo_to_real_coord(grid_to_yolo_coord(bbox['bounding_box']),
-                                                       image.real_width, image.real_height),
+        return [[[{ 'bounding_box': yolo_to_real_coord(bbox['bounding_box'],
+                                        image.real_width, image.real_height),
                     'grid_cell': bbox['grid_cell']}
                   for bbox in bboxes_of_anchor]
                  for bboxes_of_anchor in bboxes_of_image]

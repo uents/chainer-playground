@@ -176,7 +176,8 @@ def inference_to_bounding_boxes(tensors):
             bbox = Box(x=bx, y=by, width=bw, height=bh,
                        clazz=class_label_map[grid_map][i],
                        objectness=objectness_map.max(axis=0)[grid_map][i])
-            bboxes.append({'bounding_box': bbox, 'grid_cell': grid_cells[i]})
+            bboxes.append({'bounding_box': grid_to_yolo_coord(bbox),
+                           'grid_cell': grid_cells[i]})
         return bboxes
 
     return [bboxes_of_anchor(tensor, anchor_box)

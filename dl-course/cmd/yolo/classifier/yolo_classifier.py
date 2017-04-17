@@ -86,14 +86,13 @@ def train_model(args):
         print('load model: %s' % args.model_file)
         chainer.serializers.load_npz(args.model_file, model)
 
-#    optimizer = chainer.optimizers.Adam()
     optimizer = chainer.optimizers.MomentumSGD(lr=learning_rate, momentum=momentum)
     optimizer.setup(model)
+    optimizer.add_hook(chainer.optimizer.WeightDecay(weight_decay))
+    optimizer.use_cleargrads()
     if len(args.optimizer_file) > 0:
         print('load optimizer: %s' % args.optimizer_file)
         chainer.serializers.load_npz(args.optimizer_file, optimizer)
-    optimizer.add_hook(chainer.optimizer.WeightDecay(weight_decay))
-    optimizer.use_cleargrads()
 
     train_dataset = load_catalog(args.train_catalog_file)
     cv_dataset = load_catalog(args.cv_catalog_file)

@@ -8,9 +8,9 @@ import os
 import argparse
 import math
 import random
-import pprint
 import itertools
 import datetime as dt
+import pprint
 import numpy as np
 import cv2
 import json
@@ -25,6 +25,7 @@ from config import *
 from yolo_v2 import *
 from bounding_box import *
 from image_process import *
+from validation import *
 
 xp = np
 pp = pprint.PrettyPrinter(indent=2)
@@ -45,7 +46,7 @@ def load_catalog(catalog_file):
 def dict_to_box(box):
     return Box(x=float(box['x']), y=float(box['y']),
             width=float(box['width']), height=float(box['height']),
-            confidence=1., clazz=int(box['class']), objectness=1.)
+            clazz=int(box['class']), objectness=1.)
 
 def load_dataset(image_paths, truth_boxes):
     def load(path, boxes):
@@ -59,55 +60,15 @@ def load_dataset(image_paths, truth_boxes):
     truth_boxes = [item['truth'] for item in dataset]
     return images, truth_boxes
 
-#def boxes_to_tensor(boxes):
-#    each_tensor = [encode_box_tensor(box) for box in boxes]
-#    return reduce(lambda x, y: x + y, each_tensor)
-
-#def tensor_to_boxes(tensor):
-#    return nms(select_candidates(tensor))
-
-def init_positives():
-    return [{'true': 0, 'false': 0}  for i in range(0, N_CLASSES)]
-
-def count_positives(pred_boxes, truth_boxes):
-    positives = init_positives()
-    for pred_box in pred_boxes:
-        correct, iou = Box.correct(pred_box, truth_boxes)
-        if correct:
-            positives[int(pred_box.clazz)]['true'] += 1
-        else:
-            positives[int(pred_box.clazz)]['false'] += 1
-    return positives
-
-def add_positives(pos1, pos2):
-    def add_item(item1, item2):
-        return {'true': item1['true'] + item2['true'],
-                'false': item1['false'] + item2['false']}
-    return [add_item(item1, item2) for item1, item2 in zip(pos1, pos2)]
-
-def average_precisions(positives):
-    def precision(tp, fp):
-        if tp == 0 and fp == 0:
-            return 0.
-        return float(tp) / (tp + fp)
-    return [precision(p['true'], p['false']) for p in positives]
-
-def mean_average_precision(positives):
-    print('precision:')
-    pp.pprint([(i, pos) for i, pos in enumerate(positives, 0)])
-    aps = average_precisions(positives)
-    return np.asarray(aps).mean()
 
 def perform_train(model, optimizer, dataset):
     image_paths = np.asarray([item['color_image_path'] for item in dataset])
     real_truth_boxes = np.asarray([[dict_to_box(box) for box in item['bounding_boxes']]
                                     for item in dataset])
     images, truth_boxes = load_dataset(image_paths, real_truth_boxes)
-#    truth_tensors = np.asarray([boxes_to_tensor(boxes) for boxes in truth_boxes])
 
     xs = chainer.Variable(xp.asarray(images).transpose(0,3,1,2).astype(np.float32) / 255.)
     ts = [[yolo_to_grid_coord(box) for box in boxes] for boxes in truth_boxes]
-#    ts = chainer.Variable(xp.asarray(truth_tensors).astype(np.float32))
 
     model.train = True
     optimizer.update(model, xs, ts)
@@ -125,11 +86,9 @@ def perform_cv(model, optimizer, dataset):
     for count in six.moves.range(0, n_valid, 10):
         ix = np.arange(count, min(count+10, n_valid))
         images, truth_boxes = load_dataset(image_paths[ix], real_truth_boxes[ix])
-#        truth_tensors = np.asarray([boxes_to_tensor(boxes) for boxes in truth_boxes])
 
         xs = chainer.Variable(xp.asarray(images).transpose(0,3,1,2).astype(np.float32) / 255.)
         ts = [[yolo_to_grid_coord(box) for box in boxes] for boxes in truth_boxes]
-#        ts = chainer.Variable(xp.asarray(truth_tensors).astype(np.float32))
 
         model.train = False
         model(xs, ts)
@@ -137,16 +96,18 @@ def perform_cv(model, optimizer, dataset):
         tensors = model.h
 
         for batch in six.moves.range(0, len(ix)):
-            bounding_boxes = inference_to_bounding_boxes(tensor[batch])
+            bounding_boxes = inference_to_bounding_boxes(tensors[batch])
             candidates = select_candidates(bounding_boxes, CLASS_PROBABILITY_THRESH)
             winners = nms(candidates, IOU_THRESH)
-            positives = add_positives(positives, count_positives(pred_boxes, truth_boxes[batch]))
-            for pred_box, truth_box in itertools.product(pred_boxes, truth_boxes[batch]):
-                correct, iou = Box.correct(pred_box, [truth_box])
+            positives = add_positives(positives, count_positives(winners, truth_boxes[batch]))
+            for winner, truth_box in itertools.product(winners, truth_boxes[batch]):
+                correct, iou = Box.correct(winner, [truth_box])
                 print('{0} {1} {2:.3f} pred:{3} truth:{4}'.format(
-                    count + batch + 1, correct, iou, pred_box, truth_box))
+                    count + batch + 1, correct, iou, winner, truth_box))
 
-    return loss, mean_average_precision(positives)
+    print('precision:')
+    pp.pprint([(i, pos) for i, pos in enumerate(positives, 0)])
+    return loss, mean_average_precision(positives), recall(positives, real_truth_boxes)
 
 def save_learning_params(args):
     params = {
@@ -213,17 +174,17 @@ def train_model(args):
             save_learning_params(args)
     
         if (iter_count == 10) or (iter_count % 100 == 0) or (iter_count == args.iteration):
-            cv_loss, cv_map = perform_cv(model, optimizer, cv_dataset)
-            print('iter:%d trian loss:%f cv loss:%f map:%f' %
-                (iter_count, train_loss, cv_loss, cv_map))
+            cv_loss, cv_map, cv_recall = perform_cv(model, optimizer, cv_dataset)
+            print('iter:%d trian loss:%f cv loss:%f map:%f recall:%f' %
+                  (iter_count, train_loss, cv_loss, cv_map, cv_recall))
             logs.append({
                 'iteration': str(iter_count),
-                'train_loss': str(train_loss), 'train_map': str(0.0),
-                'cv_loss': str(cv_loss), 'cv_map': str(cv_map)
+                'train_loss': str(train_loss), 'cv_loss': str(cv_loss),
+                'cv_map': str(cv_map), 'cv_recall': str(cv_recall)
             })
 
             df_logs = pd.DataFrame(logs,
-                columns=['iteration', 'train_loss', 'train_map', 'cv_loss', 'cv_map'])
+                        columns=['iteration', 'train_loss', 'cv_loss', 'cv_map', 'cv_recall'])
             with open(os.path.join(SAVE_DIR, 'train_log.csv'), 'w') as fp:
                 df_logs.to_csv(fp, encoding='cp932', index=False)
 
