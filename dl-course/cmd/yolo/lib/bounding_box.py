@@ -14,6 +14,7 @@ import chainer.functions as F
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'lib'))
 from config import *
 
+
 class Point():
     def __init__(self, x, y):
         self.x = x
@@ -23,13 +24,11 @@ class Point():
         return '<Point x:{} y:{}>'.format(self.x, self.y)
 
 class Box():
-    def __init__(self, x, y, width, height,
-                 confidence=0., clazz=0, objectness=1.):
+    def __init__(self, x=0., y=0., width=0., height=0., clazz=0, objectness=1.):
         self.left = x
         self.top = y
         self.width = width
         self.height = height
-        self.confidence = confidence
         self.clazz = clazz
         self.objectness = objectness
 
@@ -115,8 +114,7 @@ def real_to_yolo_coord(box, width, height):
     w = box.width * INPUT_SIZE / width
     h = box.height * INPUT_SIZE / height
     return Box(x=x, y=y, width=w, height=h,
-               confidence=box.confidence, clazz=box.clazz,
-               objectness=box.objectness)
+               clazz=box.clazz, objectness=box.objectness)
 
 # [input_size, input_size] => [grid_size, grid_size]
 def yolo_to_grid_coord(box):
@@ -125,8 +123,7 @@ def yolo_to_grid_coord(box):
     w = box.width * N_GRID / INPUT_SIZE
     h = box.height * N_GRID / INPUT_SIZE
     return Box(x=x, y=y, width=w, height=h,
-               confidence=box.confidence, clazz=box.clazz,
-               objectness=box.objectness)
+               clazz=box.clazz, objectness=box.objectness)
 
 # [grid_size, grid_size] => [input_size, input_size]
 def grid_to_yolo_coord(box):
@@ -135,8 +132,7 @@ def grid_to_yolo_coord(box):
     w = box.width * INPUT_SIZE / N_GRID
     h = box.height * INPUT_SIZE / N_GRID
     return Box(x=x, y=y, width=w, height=h,
-               confidence=box.confidence, clazz=box.clazz,
-               objectness=box.objectness)
+               clazz=box.clazz, objectness=box.objectness)
 
 # [input_size, input_size] => [real_width, real_height]
 def yolo_to_real_coord(box, width, height):
@@ -145,108 +141,59 @@ def yolo_to_real_coord(box, width, height):
     w = box.width * width / INPUT_SIZE
     h = box.height * height / INPUT_SIZE
     return Box(x=x, y=y, width=w, height=h,
-               confidence=box.confidence, clazz=box.clazz,
-               objectness=box.objectness)
+               clazz=box.clazz, objectness=box.objectness)
 
-# YOLO座標系のBox情報をTensor情報に変換
-def encode_box_tensor(yolo_box):
-    grid_box = yolo_to_grid_coord(yolo_box)
-    grid_cell = Point(
-        x=int(math.modf(grid_box.left)[1]),
-        y=int(math.modf(grid_box.top)[1])
-    )
-    norm_box = Box(
-        x=math.modf(grid_box.left)[0],
-        y=math.modf(grid_box.top)[0],
-        width=grid_box.width,
-        height=grid_box.height,
-        confidence=grid_box.confidence,
-        clazz=grid_box.clazz,
-        objectness=1.0
-    )
+# 推論結果をBounding Boxに変換
+def inference_to_bounding_boxes(tensors):
+    def bboxes_of_anchor(tensor, anchor_box):
+        px, py, pw, ph, pconf, pprob \
+            = np.array_split(tensor, indices_or_sections=(1,2,3,4,5), axis=0)
+        px = F.sigmoid(px.reshape(px.shape[1:])).data
+        py = F.sigmoid(py.reshape(py.shape[1:])).data
+        pw = pw.reshape(pw.shape[1:])
+        ph = ph.reshape(ph.shape[1:])
+        pconf = F.sigmoid(pconf.reshape(pconf.shape[1:])).data
+        pprob = F.sigmoid(pprob).data
+        
+        # グリッド毎のクラス確率を算出 (N_CLASSES, N_GRID, N_GRID)
+        objectness_map = pprob * pconf
 
-    tensor = np.zeros(((5*N_BOXES)+N_CLASSES, N_GRID, N_GRID)).astype(np.float32)
-    tensor[:5, grid_cell.y, grid_cell.x] \
-        = [norm_box.left, norm_box.top, norm_box.width, norm_box.height, 1.0]
-    tensor[5:, grid_cell.y, grid_cell.x] \
-        = np.eye(N_CLASSES)[np.array(int(grid_box.clazz))] # one hot vector
-#    print(tensor)
-    return tensor
+        # 最大クラス確率となるクラスラベルを抽出 (N_GRID, N_GRID)
+        class_label_map = objectness_map.argmax(axis=0)
 
-# Tensor情報をYOLO座標系のBox情報に変換
-def decode_box_tensor(tensor):
-    px, py, pw, ph, pconf, pprob \
-        = np.array_split(tensor, indices_or_sections=(1,2,3,4,5), axis=0)
-    px = px.reshape(px.shape[1:])
-    py = py.reshape(py.shape[1:])
-    pw = pw.reshape(pw.shape[1:])
-    ph = ph.reshape(ph.shape[1:])
-    pconf = pconf.reshape(pconf.shape[1:])
+        # 全てのグリッドマップと位置を算出 (N_GRID, N_GRID)
+        grid_map = np.tile(True, pconf.shape)
+        grid_cells = [Point(x=float(p[1]), y=float(p[0])) for p in np.argwhere(grid_map)]
 
-    # グリッド毎のクラス確率を算出 (N_CLASSES, N_GRID, N_GRID)
-    class_prob_map = pprob * pconf
-    # 最大クラス確率となるクラスラベルを抽出 (N_GRID, N_GRID)
-    class_label_map = class_prob_map.argmax(axis=0)
-    # 全てのグリッドマップを算出 (N_GRID, N_GRID)
-    grid_map = np.tile(True, pconf.shape)
-    # 全てのグリッド位置を算出 (N_GRID, N_GRID)
-    grid_cells = [Point(x=float(point[1]), y=float(point[0]))
-                    for point in np.argwhere(grid_map)]
+        bboxes = []
+        for i in six.moves.range(0, grid_map.sum()):
+            bw = np.exp(pw[grid_map][i]) * anchor_box[0]
+            bh = np.exp(ph[grid_map][i]) * anchor_box[1]
+            bx = max(grid_cells[i].x + px[grid_map][i] - bw/2., 0.)
+            by = max(grid_cells[i].y + py[grid_map][i] - bh/2., 0.)
+            bw = min(bw, N_GRID - bx)
+            bh = min(bh, N_GRID - by)
+            bbox = Box(x=bx, y=by, width=bw, height=bh,
+                       clazz=class_label_map[grid_map][i],
+                       objectness=objectness_map.max(axis=0)[grid_map][i])
+            bboxes.append({'bounding_box': bbox, 'grid_cell': grid_cells[i]})
+        return bboxes
 
-    boxes = []
-    for i in six.moves.range(0, grid_map.sum()):
-        grid_box = Box(x=px[grid_map][i],
-                    y=py[grid_map][i],
-                    width=pw[grid_map][i],
-                    height=ph[grid_map][i],
-                    confidence=pconf[grid_map][i],
-                    clazz=class_label_map[grid_map][i],
-                    objectness=class_prob_map.max(axis=0)[grid_map][i])
-        boxes.append(
-            {'box': grid_to_yolo_coord(grid_box, grid_cells[i]),
-             'grid_cell': grid_cells[i]}
-        )
-    return boxes
+    return [bboxes_of_anchor(tensor, anchor_box)
+            for tensor, anchor_box in zip(tensors, ANCHOR_BOXES)]
+
 
 # 検出候補のBounding Boxを選定
-def select_candidates(pxs, pys, pws, phs, pconfs, pprobs):
-    def extract_from_each_anchor(px, py, pw, ph, pconf, pprob, anchor_box):
-        # グリッド毎のクラス確率を算出 (N_CLASSES, N_GRID, N_GRID)
-        class_prob_map = pprob * pconf
-        # 最大クラス確率となるクラスラベルを抽出 (N_GRID, N_GRID)
-        class_label_map = class_prob_map.argmax(axis=0)
-        # 最大クラス確率が閾値以上のグリッドを検出候補として抽出 (N_GRID, N_GRID)
-        candidate_map = class_prob_map.max(axis=0) >= CLASS_PROBABILITY_THRESH
-        # 検出候補のグリッド位置を抽出
-        grid_cells = [Point(x=float(point[1]), y=float(point[0]))
-                      for point in np.argwhere(candidate_map)]
+def select_candidates(bounding_boxes, thresh=0.):
+    candidates = [[bbox['bounding_box'] for bbox in bboxes_of_anchor]
+                  for bboxes_of_anchor in bounding_boxes]
+    candidates = reduce(lambda x, y: x + y, candidates)
+    return filter(lambda c: c.objectness >= thresh, candidates)
 
-        candidates = []
-        for i in six.moves.range(0, candidate_map.sum()):
-            pred_w = np.exp(pw[0][candidate_map][i]) * anchor_box[0]
-            pred_h = np.exp(ph[0][candidate_map][i]) * anchor_box[1]
-            pred_x = max(px[0][candidate_map][i] + grid_cells[i].x - pred_w/2., 0.)
-            pred_y = max(py[0][candidate_map][i] + grid_cells[i].y - pred_h/2., 0.)
-            pred_w = min(pred_w, N_GRID - pred_x)
-            pred_h = min(pred_h, N_GRID - pred_y)
-            pred_box = Box(x=pred_x, y=pred_y, width=pred_w, height=pred_h,
-                           confidence=pconf[0][candidate_map][i],
-                           clazz=class_label_map[candidate_map][i],
-                           objectness=class_prob_map.max(axis=0)[candidate_map][i])
-#            print(pred_box)
-            candidates.append(grid_to_yolo_coord(pred_box))
-        return candidates
 
-    all_candidates = [extract_from_each_anchor(px, py, pw, ph, pconf, pprob, anchor_box)
-                      for px, py, pw, ph, pconf, pprob, anchor_box
-                      in zip(pxs, pys, pws, phs, pconfs, pprobs, ANCHOR_BOXES)]
-    return reduce(lambda x, y: x + y, all_candidates)
-    
-
-# non-maximum supression
-def nms(candidates):
-    if len(candidates) == 0:
-        return []
+# non-maximum suppression
+def nms(candidates, thresh=0.):
+    if len(candidates) == 0: return []
 
     winners = []
     sorted(candidates, key=lambda box: box.objectness, reverse=True)
@@ -256,7 +203,7 @@ def nms(candidates):
     # TODO: 比較すべきは勝ち残ったBoxかも？
     for i, box1 in enumerate(candidates[1:], 1):
         for box2 in candidates[:i]:
-            if Box.iou(box1, box2) >= IOU_THRESH:
+            if Box.iou(box1, box2) >= thresh:
                 break
         else:
             winners.append(box1)

@@ -134,11 +134,12 @@ def perform_cv(model, optimizer, dataset):
         model.train = False
         model(xs, ts)
         loss += model.loss.data * len(ix) / n_valid
-        px, py, pw, ph, pconf, pprob = model.h
+        tensors = model.h
 
         for batch in six.moves.range(0, len(ix)):
-            pred_boxes = nms(select_candidates(px[batch], py[batch], pw[batch], ph[batch],
-                                               pconf[batch], pprob[batch]))
+            bounding_boxes = inference_to_bounding_boxes(tensor[batch])
+            candidates = select_candidates(bounding_boxes, CLASS_PROBABILITY_THRESH)
+            winners = nms(candidates, IOU_THRESH)
             positives = add_positives(positives, count_positives(pred_boxes, truth_boxes[batch]))
             for pred_box, truth_box in itertools.product(pred_boxes, truth_boxes[batch]):
                 correct, iou = Box.correct(pred_box, [truth_box])

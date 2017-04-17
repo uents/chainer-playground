@@ -19,7 +19,7 @@ import chainer.links as L
 
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'lib'))
 from config import *
-from yolo import *
+from yolo_v2 import *
 from bounding_box import *
 from image_process import *
 
@@ -32,11 +32,8 @@ def load_catalog(catalog_file):
             catalog = json.load(fp)
     except IOError:
         return []
-
-    dataset = catalog['dataset']
-    image_paths = np.asarray([item['color_image_path'] for item in dataset])
-    return image_paths
-
+    dataset = filter(lambda item: item['bounding_boxes'] != [], catalog['dataset'])
+    return dataset
 
 def make_result_dict(predicted_boxes, real_width, real_height):
     def to_box_dict(pred_box):

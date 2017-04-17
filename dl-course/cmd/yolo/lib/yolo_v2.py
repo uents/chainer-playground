@@ -1,4 +1,3 @@
-
 # -*- coding: utf-8 -*-
 
 from __future__ import unicode_literals
@@ -6,7 +5,6 @@ from __future__ import print_function
 import six
 import sys
 import os
-#import pprint
 import numpy as np
 
 import chainer
@@ -17,7 +15,6 @@ sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '
 from config import *
 from bounding_box import *
 
-#pp = pprint.PrettyPrinter(indent=2)
 
 N_CNN_LAYER = 18
 
@@ -280,6 +277,9 @@ class YoloDetector(chainer.Chain):
         h = F.leaky_relu(self.bias21(self.bn21(self.conv21(h), test=not self.train)), slope=0.1)
 
         h = self.bias22(self.conv22(h))
+
+        # reshape output tensor
+        h = F.reshape(h, (batch_size, N_BOXES, 5+N_CLASSES, N_GRID, N_GRID))
         return h
 
     def reorg(self, h, stride=2):
@@ -300,9 +300,7 @@ class YoloDetector(chainer.Chain):
 
         # 推論を実行し結果を抽出
         h = self.forward(h)
-        h = F.reshape(h, (batch_size, N_BOXES, 5+N_CLASSES, N_GRID, N_GRID))
-        px, py, pw, ph, pconf, pprob \
-            = F.split_axis(h, indices_or_sections=(1,2,3,4,5), axis=2)
+        px, py, pw, ph, pconf, pprob = F.split_axis(h, indices_or_sections=(1,2,3,4,5), axis=2)
         px = F.sigmoid(px)
         py = F.sigmoid(py)
 #        pw = pw - F.broadcast_to(F.expand_dims(F.logsumexp(pw, axis=1), 1), pw.shape)
@@ -414,11 +412,8 @@ class YoloDetector(chainer.Chain):
             return self.h
 
     def predict(self, x):
-        batch_size = x.shape[0]
         h = self.forward(x)
-        h = F.reshape(h, (batch_size, N_BOXES, 5+N_CLASSES, N_GRID, N_GRID))
-        h = self.from_variable(h)
-        return h.data.get()
+        return self.from_variable(h)
 
     def all_pred_boxes(self, px, py, pw, ph):
         x_offsets = np.broadcast_to(np.arange(N_GRID).astype(np.float32), px.shape)

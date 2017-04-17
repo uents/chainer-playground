@@ -15,7 +15,7 @@ N_CLASSES = 26  # 0..25
 N_GRID = 7
 INPUT_SIZE = N_GRID * 32
 
-ANCHOR_BOXES = np.array([[5.375, 5.03125],
+ANCHOR_BOXES = np.array([[5.375, 5.03125], # width, heightの並び
                          [5.40625, 2.6875],
                          [2.96875, 2.53125],
                          [1.59375, 1.78125],
@@ -26,22 +26,23 @@ N_BOXES = int(len(ANCHOR_BOXES))
 # training configurations
 MOMENTUM = 0.9
 WEIGHT_DECAY = 0.005
+DROPOUT_RATIO = 0.5 # unused
+
 LR_SCHEDULES = {
     '1': 1e-6,
     '101': 1e-5,
     '4001': 3e-6,
 }
 
-DROPOUT_RATIO = 0.5
 SCALE_FACTORS = {
     'coord': 1.0,
     'nocoord': 0.1,
     'conf': 3.0,
     'noconf': 0.1,
 }
-
-# detection configurations
 CONFIDENCE_KEEP_THRESH = 0.6
+
+# cross validation configurations
 CLASS_PROBABILITY_THRESH = 0.3
 IOU_THRESH = 0.3
 
