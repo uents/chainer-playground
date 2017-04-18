@@ -17,7 +17,6 @@ from yolo_v2 import *
 from bounding_box import *
 from image_process import *
 
-xp = np
 
 class YoloPredictor(chainer.Chain):
     def __init__(self, gpu=-1, model_file=''):
@@ -25,11 +24,11 @@ class YoloPredictor(chainer.Chain):
         if len(model_file) > 0:
             print('load model: %s' % model_file)
             chainer.serializers.load_npz(model_file, self.model)
-        if gpu >= 0:
-            xp = chainer.cuda.cupy
+        self.model.train = False
         self.gpu = gpu
 
     def predict(self, image_paths):
+        xp = chainer.cuda.cupy if self.gpu >= 0 else np
         batch_size = len(image_paths)
         
         # 画像リストをロード
@@ -43,7 +42,7 @@ class YoloPredictor(chainer.Chain):
         # 推論結果をBounding Boxに変換
         bounding_boxes = [inference_to_bounding_boxes(tensor) for tensor in tensors]
         return [[[{ 'bounding_box': yolo_to_real_coord(bbox['bounding_box'],
-                                        image.real_width, image.real_height),
+                                                       image.real_width, image.real_height),
                     'grid_cell': bbox['grid_cell']}
                   for bbox in bboxes_of_anchor]
                  for bboxes_of_anchor in bboxes_of_image]

@@ -25,10 +25,11 @@ from config import *
 from yolo_v2 import *
 from bounding_box import *
 from image_process import *
-from validation import *
+from collector import *
 
 xp = np
 pp = pprint.PrettyPrinter(indent=2)
+pd.set_option('line_width', 150)
 
 START_TIME = dt.datetime.now().strftime('%Y-%m-%d_%H%M%S')
 SAVE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)),
@@ -42,11 +43,6 @@ def load_catalog(catalog_file):
         return []
     dataset = filter(lambda item: item['bounding_boxes'] != [], catalog['dataset'])
     return dataset
-
-def dict_to_box(box):
-    return Box(x=float(box['x']), y=float(box['y']),
-            width=float(box['width']), height=float(box['height']),
-            clazz=int(box['class']), objectness=1.)
 
 def load_dataset(image_paths, truth_boxes):
     def load(path, boxes):
@@ -77,12 +73,12 @@ def perform_train(model, optimizer, dataset):
 def perform_cv(model, optimizer, dataset):
     n_valid = len(dataset)
     if n_valid == 0: return 0., 0.
+    collector = Collector(args.cv_catalog_file)
 
     image_paths = np.asarray([item['color_image_path'] for item in dataset])
     real_truth_boxes = np.asarray([[dict_to_box(box) for box in item['bounding_boxes']]
                                     for item in dataset])
     loss = 0.
-    positives = init_positives()
     for count in six.moves.range(0, n_valid, 10):
         ix = np.arange(count, min(count+10, n_valid))
         images, truth_boxes = load_dataset(image_paths[ix], real_truth_boxes[ix])
@@ -98,16 +94,18 @@ def perform_cv(model, optimizer, dataset):
         for batch in six.moves.range(0, len(ix)):
             bounding_boxes = inference_to_bounding_boxes(tensors[batch])
             candidates = select_candidates(bounding_boxes, CLASS_PROBABILITY_THRESH)
-            winners = nms(candidates, IOU_THRESH)
-            positives = add_positives(positives, count_positives(winners, truth_boxes[batch]))
+            winners = nms(candidates, NMS_IOU_THRESH)
+            collector.validate_bounding_boxes(winners, truth_boxes[batch])
             for winner, truth_box in itertools.product(winners, truth_boxes[batch]):
                 correct, iou = Box.correct(winner, [truth_box])
                 print('{0} {1} {2:.3f} pred:{3} truth:{4}'.format(
                     count + batch + 1, correct, iou, winner, truth_box))
 
-    print('precision:')
-    pp.pprint([(i, pos) for i, pos in enumerate(positives, 0)])
-    return loss, mean_average_precision(positives), recall(positives, real_truth_boxes)
+    collector.update()
+    print(collector.df)
+    print('map:%f recall:%f' % (collector.mean_ap, collector.recall))
+    return loss, collector.mean_ap, collector.recall
+
 
 def save_learning_params(args):
     params = {
@@ -130,7 +128,7 @@ def save_learning_params(args):
         'scale_factors': SCALE_FACTORS,
         'confidence_keep_thresh': CONFIDENCE_KEEP_THRESH,
         'class_prob_thresh': CLASS_PROBABILITY_THRESH,
-        'iou_thresh': IOU_THRESH
+        'nms_iou_thresh': NMS_IOU_THRESH
     }
     with open(os.path.join(SAVE_DIR, 'params.json'), 'w') as fp:
         json.dump(params, fp, sort_keys=True, ensure_ascii=False, indent=2)

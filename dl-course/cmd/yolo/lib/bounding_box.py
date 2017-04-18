@@ -99,6 +99,10 @@ class Box():
         return True, best_score
 
     
+def dict_to_box(box):
+    return Box(x=float(box['x']), y=float(box['y']),
+            width=float(box['width']), height=float(box['height']),
+            clazz=int(box['class']), objectness=1.)
 
 def safe_divide(dividend, divisor):
     if type(divisor) == np.ndarray:

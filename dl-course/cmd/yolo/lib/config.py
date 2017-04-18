@@ -42,9 +42,9 @@ SCALE_FACTORS = {
 }
 CONFIDENCE_KEEP_THRESH = 0.6
 
-# cross validation configurations
+# inference configurations
 CLASS_PROBABILITY_THRESH = 0.3
-IOU_THRESH = 0.3
+NMS_IOU_THRESH = 0.3
 
 # file paths
 CLASSIFIER_FINAL_MODEL_PATH \

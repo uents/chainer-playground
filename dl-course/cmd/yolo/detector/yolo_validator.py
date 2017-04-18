@@ -9,6 +9,8 @@ import argparse
 import math
 import random
 import itertools
+import datetime as dt
+import pprint
 import numpy as np
 import cv2
 import json
@@ -19,12 +21,17 @@ import chainer.links as L
 
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'lib'))
 from config import *
-from yolo_v2 import *
+from yolo_predictor import *
 from bounding_box import *
 from image_process import *
+from collector import *
 
 xp = np
+pp = pprint.PrettyPrinter(indent=2)
 
+START_TIME = dt.datetime.now().strftime('%Y-%m-%d_%H%M%S')
+SAVE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                        'valid_' + START_TIME)
 
 def load_catalog(catalog_file):
     try:
@@ -35,66 +42,67 @@ def load_catalog(catalog_file):
     dataset = filter(lambda item: item['bounding_boxes'] != [], catalog['dataset'])
     return dataset
 
-def make_result_dict(predicted_boxes, real_width, real_height):
-    def to_box_dict(pred_box):
-        box = yolo_to_real_coord(pred_box['box'], real_width, real_height)
-        return {
-            'box': {
-                'x': str(box.left),
-                'y': str(box.top),
-                'width': str(box.width),
-                'height': str(box.height),
-                'confidence': str(box.confidence),
-                'class': str(int(box.clazz)),
-                'objectness': str(box.objectness)
-            },
-            'grid_cell': {
-                'x': str(int(pred_box['grid_cell'].x)),
-                'y': str(int(pred_box['grid_cell'].y))
-            }
-        }
-    return [to_box_dict(pred_box) for pred_box in predicted_boxes]
+def validate(args):
+    print('validate: gpu:%d class_prob_thresh:%1.2f nms_iou_thresh:%1.2f' %
+          (args.gpu, args.class_prob_thresh, args.nms_iou_thresh))
+    collector = Collector(args.catalog_file)
 
-def predict(args):
-    print('predict: gpu:%d' % (args.gpu))
+    # 推論モデルをロード
+    model = YoloPredictor(args.gpu, args.model_file)
 
-    model = YoloDetector(args.gpu)
-    if len(args.model_file) > 0:
-        print('load model: %s' % (args.model_file))
-        chainer.serializers.load_npz(args.model_file, model)
+    # データセットの読み出し
+    dataset = load_catalog(args.catalog_file)
+    image_paths = np.asarray([item['color_image_path'] for item in dataset])
+    real_truth_boxes = np.asarray([[dict_to_box(box) for box in item['bounding_boxes']]
+                              for item in dataset])
+    n_valid = len(dataset)
+    print('number of dataset: %d' % n_valid)
+    if n_valid == 0: return
 
-    image_paths = load_catalog(args.catalog_file)
-    n_test = len(image_paths)
-    print('number of dataset: %d' % n_test)
+    for count in six.moves.range(0, n_valid, 10):
+        # 推論を実行
+        ix = np.arange(count, min(count+10, n_valid))
+        truth_boxes = real_truth_boxes[ix]
+        bounding_boxes = model.predict(image_paths[ix])
 
-    results = []
-    for count, image_path in enumerate(image_paths, 1):
-        sys.stdout.write('\r%d predict: %s' % (count, image_path))
-        image = Image(image_path, INPUT_SIZE, INPUT_SIZE)
-        xs = chainer.Variable(
-            xp.asarray(image.image[np.newaxis,:]).transpose(0,3,1,2).astype(np.float32) / 255.)
+        # バウンディングボックスの絞り込み
+        for batch in six.moves.range(0, len(ix)):
+            candidates = select_candidates(bounding_boxes[batch], args.class_prob_thresh)
+            winners = nms(candidates, args.nms_iou_thresh)
+            collector.validate_bounding_boxes(winners, truth_boxes[batch])
+            for winner, truth_box in itertools.product(winners, truth_boxes[batch]):
+                correct, iou = Box.correct(winner, [truth_box])
+                print('{0} {1} {2:.3f} pred:{3} truth:{4}'.format(
+                    count + batch + 1, correct, iou, winner, truth_box))
 
-        model.train = False
-        h = model.predict(xs)
-        predicted_boxes = decode_box_tensor(h[0])
-        results.append({
-            'color_image_path': image_path,
-            'bounding_boxes': make_result_dict(predicted_boxes, image.real_width, image.real_height)
-        })
-
-    with open(args.result_file, 'w') as fp:
-        json.dump(results, fp, sort_keys=True, ensure_ascii=False, indent=2)
-
+    collector.update()
+    print('map:%f recall:%f' % (collector.mean_ap, collector.recall))
+    collector.dump(SAVE_DIR)
 
 def parse_arguments():
     description = 'YOLO Detection Predictor'
     parser = argparse.ArgumentParser(description=description)
-    parser.add_argument('--model-file', type=str, dest='model_file', default=DETECTOR_FINAL_MODEL_PATH)
-    parser.add_argument('--catalog-file', type=str, dest='catalog_file', default='')
-    parser.add_argument('--result-file', type=str, dest='result_file', default='', required=True)
+    parser.add_argument('--model-file', type=str, dest='model_file', default='')
+    parser.add_argument('--catalog-file', type=str, dest='catalog_file', default='', required=True)
+    parser.add_argument('--class-prob-thresh', type=float, dest='class_prob_thresh', default=0.3)
+    parser.add_argument('--nms-iou-thresh', type=float, dest='nms_iou_thresh', default=0.3)
     parser.add_argument('--gpu', '-g', type=int, default=-1)
     return parser.parse_args()
 
+def save_params(args):
+    params = {
+        'elapsed_time': {
+            'start': START_TIME,
+            'end': dt.datetime.now().strftime('%Y-%m-%d_%H%M%S')
+        },
+        'catalog_file': args.catalog_file,
+        'model_file': args.model_file,
+        'class_prob_thresh': args.class_prob_thresh,
+        'nms_iou_thresh': args.nms_iou_thresh
+    }
+    with open(os.path.join(SAVE_DIR, 'params.json'), 'w') as fp:
+        json.dump(params, fp, sort_keys=True, ensure_ascii=False, indent=2)
+    
 if __name__ == '__main__':
     args = parse_arguments()
 
@@ -102,5 +110,10 @@ if __name__ == '__main__':
         chainer.cuda.get_device(args.gpu).use()
         xp = chainer.cuda.cupy
 
-    predict(args)
+    if not os.path.exists(SAVE_DIR):
+        os.makedirs(SAVE_DIR)
+
+    validate(args)
+    save_params(args)
+
     print('done')
