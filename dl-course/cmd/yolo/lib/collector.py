@@ -35,7 +35,7 @@ class Collector():
 
         # 集計用のデータフレームを用意
         df = pd.DataFrame(columns=['class', 'total', 'true_positive', 'false_positive',
-                                   'average_precision', 'avrage_recall'])
+                                   'average_precision', 'average_recall'])
         df['class'] = np.arange(1, N_CLASSES)
         df = df.set_index('class').fillna(0)
         df.ix[:, 'total'] = [len(filter(lambda box: box.clazz == clazz, truth_boxes.ravel()))
@@ -57,6 +57,7 @@ class Collector():
             = self.df.ix[:, 'true_positive'] / (self.df.ix[:, 'true_positive'] + self.df.ix[:, 'false_positive'])
         self.df.ix[:, 'average_recall'] \
             = self.df.ix[:, 'true_positive'] / self.df.ix[:, 'total']
+        self.df = self.df.fillna(0)
         self.mean_ap = self.df['average_precision'].mean()
         self.recall = float(self.df['true_positive'].sum()) / self.df['total'].sum()
 

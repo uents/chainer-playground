@@ -76,6 +76,7 @@ def validate(args):
                     count + batch + 1, correct, iou, winner, truth_box))
 
     collector.update()
+    print(collector.df)
     print('map:%f recall:%f' % (collector.mean_ap, collector.recall))
     collector.dump(SAVE_DIR)
 
