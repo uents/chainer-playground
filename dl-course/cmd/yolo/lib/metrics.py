@@ -25,7 +25,7 @@ def load_catalog(catalog_file):
     dataset = filter(lambda item: item['bounding_boxes'] != [], catalog['dataset'])
     return dataset
 
-class Collector():
+class Metrics():
     def __init__(self, catalog_file=''):
         dataset = load_catalog(catalog_file)
         truth_boxes = np.asarray([[dict_to_box(box) for box in item['bounding_boxes']]

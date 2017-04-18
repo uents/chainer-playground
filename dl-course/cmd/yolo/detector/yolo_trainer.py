@@ -25,11 +25,11 @@ from config import *
 from yolo_v2 import *
 from bounding_box import *
 from image_process import *
-from collector import *
+from metrics import *
 
 xp = np
 pp = pprint.PrettyPrinter(indent=2)
-pd.set_option('line_width', 150)
+pd.display_width = 150
 
 START_TIME = dt.datetime.now().strftime('%Y-%m-%d_%H%M%S')
 SAVE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)),
@@ -71,9 +71,10 @@ def perform_train(model, optimizer, dataset):
     return model.loss.data
 
 def perform_cv(model, optimizer, dataset):
+    metrics = Metrics(args.cv_catalog_file)
+
     n_valid = len(dataset)
     if n_valid == 0: return 0., 0.
-    collector = Collector(args.cv_catalog_file)
 
     image_paths = np.asarray([item['color_image_path'] for item in dataset])
     real_truth_boxes = np.asarray([[dict_to_box(box) for box in item['bounding_boxes']]
@@ -95,44 +96,17 @@ def perform_cv(model, optimizer, dataset):
             bounding_boxes = inference_to_bounding_boxes(tensors[batch])
             candidates = select_candidates(bounding_boxes, CLASS_PROBABILITY_THRESH)
             winners = nms(candidates, NMS_IOU_THRESH)
-            collector.validate_bounding_boxes(winners, truth_boxes[batch])
-            for winner, truth_box in itertools.product(winners, truth_boxes[batch]):
-                correct, iou = Box.correct(winner, [truth_box])
+            metrics.validate_bounding_boxes(winners, truth_boxes[batch])
+
+            for winner in winners:
+                correct, iou = Box.correct(winner, truth_boxes[batch])
                 print('{0} {1} {2:.3f} pred:{3} truth:{4}'.format(
-                    count + batch + 1, correct, iou, winner, truth_box))
+                    count+batch+1, correct, iou, winner, truth_boxes[batch]))
 
-    collector.update()
-    print(collector.df)
-    print('map:%f recall:%f' % (collector.mean_ap, collector.recall))
-    return loss, collector.mean_ap, collector.recall
-
-
-def save_learning_params(args):
-    params = {
-        'elapsed_time': {
-            'start': START_TIME,
-            'end': dt.datetime.now().strftime('%Y-%m-%d_%H%M%S')
-        },
-        'catalog_file': {
-            'train': args.train_catalog_file,
-            'cv': args.cv_catalog_file
-        },
-        'grid_cells': N_GRID,
-        'anchor_boxes': '{}'.format(ANCHOR_BOXES),
-        'max_iterations': args.iteration,
-        'batch_size': args.batch_size,
-        'momentum': MOMENTUM,
-        'weight_decay': WEIGHT_DECAY,
-        'lr_schedules': LR_SCHEDULES,
-        'dropout_ratio': DROPOUT_RATIO,
-        'scale_factors': SCALE_FACTORS,
-        'confidence_keep_thresh': CONFIDENCE_KEEP_THRESH,
-        'class_prob_thresh': CLASS_PROBABILITY_THRESH,
-        'nms_iou_thresh': NMS_IOU_THRESH
-    }
-    with open(os.path.join(SAVE_DIR, 'params.json'), 'w') as fp:
-        json.dump(params, fp, sort_keys=True, ensure_ascii=False, indent=2)
-
+    metrics.update()
+    print(metrics.df)
+    print('map:%f recall:%f' % (metrics.mean_ap, metrics.recall))
+    return loss, metrics.mean_ap, metrics.recall
 
 def train_model(args):
     print('train: gpu:%d iteration:%d batch_size:%d save_dir:%s' % \
@@ -170,7 +144,7 @@ def train_model(args):
         if not os.path.exists(SAVE_DIR):
             os.makedirs(SAVE_DIR)
             save_learning_params(args)
-    
+
         if (iter_count == 10) or (iter_count % 100 == 0) or (iter_count == args.iteration):
             cv_loss, cv_map, cv_recall = perform_cv(model, optimizer, cv_dataset)
             print('iter:%d trian loss:%f cv loss:%f map:%f recall:%f' %
@@ -211,6 +185,32 @@ def parse_arguments():
     parser.add_argument('--iteration', '-i', type=int, dest='iteration', default=1)
     parser.add_argument('--start-iteration-count', '-s', type=int, dest='start_iter_count', default=1)
     return parser.parse_args()
+
+def save_learning_params(args):
+    params = {
+        'elapsed_time': {
+            'start': START_TIME,
+            'end': dt.datetime.now().strftime('%Y-%m-%d_%H%M%S')
+        },
+        'catalog_file': {
+            'train': args.train_catalog_file,
+            'cv': args.cv_catalog_file
+        },
+        'grid_cells': N_GRID,
+        'anchor_boxes': '{}'.format(ANCHOR_BOXES),
+        'max_iterations': args.iteration,
+        'batch_size': args.batch_size,
+        'momentum': MOMENTUM,
+        'weight_decay': WEIGHT_DECAY,
+        'lr_schedules': LR_SCHEDULES,
+#        'dropout_ratio': DROPOUT_RATIO,
+        'scale_factors': SCALE_FACTORS,
+        'confidence_keep_thresh': CONFIDENCE_KEEP_THRESH,
+        'class_prob_thresh': CLASS_PROBABILITY_THRESH,
+        'nms_iou_thresh': NMS_IOU_THRESH
+    }
+    with open(os.path.join(SAVE_DIR, 'params.json'), 'w') as fp:
+        json.dump(params, fp, sort_keys=True, ensure_ascii=False, indent=2)
 
 if __name__ == '__main__':
     args = parse_arguments()
