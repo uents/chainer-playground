@@ -28,10 +28,10 @@ from collector import *
 
 xp = np
 pp = pprint.PrettyPrinter(indent=2)
+pd.set_option('line_width', 150)
 
 START_TIME = dt.datetime.now().strftime('%Y-%m-%d_%H%M%S')
-SAVE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                        'valid_' + START_TIME)
+SAVE_DIR = os.path.join(os.getcwd(), 'valid_' + START_TIME)
 
 def load_catalog(catalog_file):
     try:
@@ -43,8 +43,9 @@ def load_catalog(catalog_file):
     return dataset
 
 def validate(args):
-    print('validate: gpu:%d class_prob_thresh:%1.2f nms_iou_thresh:%1.2f' %
-          (args.gpu, args.class_prob_thresh, args.nms_iou_thresh))
+    print('validate: gpu:%d class_prob_thresh:%1.2f nms_iou_thresh:%1.2f save_dir:%s' %
+          (args.gpu, args.class_prob_thresh, args.nms_iou_thresh, SAVE_DIR))
+
     collector = Collector(args.catalog_file)
 
     # 推論モデルをロード

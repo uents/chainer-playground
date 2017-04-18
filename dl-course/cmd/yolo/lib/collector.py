@@ -35,7 +35,8 @@ class Collector():
 
         # 集計用のデータフレームを用意
         df = pd.DataFrame(columns=['class', 'total', 'true_positive', 'false_positive',
-                                   'average_precision', 'average_recall'])
+                                   'average_precision', 'average_recall',
+                                   'average_iou', 'sum_iou'])
         df['class'] = np.arange(1, N_CLASSES)
         df = df.set_index('class').fillna(0)
         df.ix[:, 'total'] = [len(filter(lambda box: box.clazz == clazz, truth_boxes.ravel()))
@@ -47,6 +48,7 @@ class Collector():
             if int(pred_box.clazz) == 0:
                 continue
             correct, iou = Box.correct(pred_box, truth_boxes)
+            self.df.ix[int(pred_box.clazz), 'sum_iou'] += iou
             if correct:
                 self.df.ix[int(pred_box.clazz), 'true_positive'] += 1
             else:
@@ -57,6 +59,9 @@ class Collector():
             = self.df.ix[:, 'true_positive'] / (self.df.ix[:, 'true_positive'] + self.df.ix[:, 'false_positive'])
         self.df.ix[:, 'average_recall'] \
             = self.df.ix[:, 'true_positive'] / self.df.ix[:, 'total']
+        self.df.ix[:, 'average_iou'] \
+            = self.df.ix[:, 'sum_iou'] / (self.df.ix[:, 'true_positive'] + self.df.ix[:, 'false_positive'])
+        self.df = self.df.drop('sum_iou', axis=1)
         self.df = self.df.fillna(0)
         self.mean_ap = self.df['average_precision'].mean()
         self.recall = float(self.df['true_positive'].sum()) / self.df['total'].sum()
