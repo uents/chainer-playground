@@ -51,11 +51,11 @@ def overlay_bounding_box(image, bbox, correct, iou):
     cv2.rectangle(image, (int(bbox.left), int(bbox.top)),
         (int(bbox.right), int(bbox.bottom)), rgb, thickness=2)
     cv2.rectangle(image, (int(bbox.left), int(bbox.top)),
-        (int(bbox.left)+200, int(bbox.top)+24), rgb, thickness=-1)
+        (int(bbox.left)+432, int(bbox.top)+48), rgb, thickness=-1)
     label = ('%s c:%s o:%1.2f iou:%1.2f' %
                 (('ok' if correct else 'fail'), str(bbox.clazz), bbox.objectness, iou))
-    cv2.putText(image, label, (int(bbox.left)+4, int(bbox.top)+16),
-        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,0,0), thickness=2)
+    cv2.putText(image, label, (int(bbox.left)+8, int(bbox.top)+32),
+        cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0,0,0), thickness=2)
     return image
 
 def validate(args):
@@ -85,29 +85,33 @@ def validate(args):
     metrics = Metrics(args.catalog_file)
 
     for count in six.moves.range(0, n_valid, 10):
-        # 推論を実行
         ix = np.arange(count, min(count+10, n_valid))
         truth_boxes = real_truth_boxes[ix]
         image_paths = [image['path'] for image in images[ix]]
 
+        # 推論を実行
         bounding_boxes = model.predict(image_paths)
 
         # バウンディングボックスの絞り込み
         for batch in six.moves.range(0, len(ix)):
             candidates = select_candidates(bounding_boxes[batch], args.class_prob_thresh)
             winners = nms(candidates, args.nms_iou_thresh)
+
+            # メトリクス集計
             metrics.validate_bounding_boxes(winners, truth_boxes[batch])
 
-            result_image = cv2.imread(image_paths[batch])
+            # 推定領域の検証用画像を作成
+            verified_image = cv2.imread(image_paths[batch])
             for winner in winners:
                 correct, iou = Box.correct(winner, truth_boxes[batch])
                 print('{0} {1} {2:.3f} pred:{3} truth:{4}'.format(
                     count+batch+1, correct, iou, winner, truth_boxes[batch]))
-                result_image = overlay_bounding_box(result_image, winner, correct, iou)
+                verified_image = overlay_bounding_box(verified_image, winner, correct, iou)
 
-            result_image_path = os.path.join(SAVE_DIR,
+            verified_image = cv2.resize(verified_image, (640, 480))
+            verified_image_path = os.path.join(SAVE_DIR,
                 '{}_{}.png'.format(images[ix][batch]['classes'], images[ix][batch]['pattern_id']))
-            cv2.imwrite(result_image_path, result_image)
+            cv2.imwrite(verified_image_path, verified_image)
 
     metrics.update()
     print(metrics.df)
