@@ -121,20 +121,20 @@ def real_to_yolo_coord(box, width, height, input_size=INPUT_SIZE):
                clazz=box.clazz, objectness=box.objectness)
 
 # [input_size, input_size] => [grid_size, grid_size]
-def yolo_to_grid_coord(box, input_size=INPUT_SIZE):
-    x = box.left * N_GRID / input_size
-    y = box.top * N_GRID / input_size
-    w = box.width * N_GRID / input_size
-    h = box.height * N_GRID / input_size
+def yolo_to_grid_coord(box):
+    x = box.left / GRID_SIZE
+    y = box.top / GRID_SIZE
+    w = box.width / GRID_SIZE
+    h = box.height / GRID_SIZE
     return Box(x=x, y=y, width=w, height=h,
                clazz=box.clazz, objectness=box.objectness)
 
 # [grid_size, grid_size] => [input_size, input_size]
-def grid_to_yolo_coord(box, input_size=INPUT_SIZE):
-    x = box.left * input_size / N_GRID
-    y = box.top * input_size / N_GRID
-    w = box.width * input_size / N_GRID
-    h = box.height * input_size / N_GRID
+def grid_to_yolo_coord(box):
+    x = box.left * GRID_SIZE
+    y = box.top * GRID_SIZE
+    w = box.width * GRID_SIZE
+    h = box.height * GRID_SIZE
     return Box(x=x, y=y, width=w, height=h,
                clazz=box.clazz, objectness=box.objectness)
 
@@ -180,7 +180,7 @@ def inference_to_bounding_boxes(tensors, anchor_boxes=ANCHOR_BOXES, input_size=I
             bbox = Box(x=bx, y=by, width=bw, height=bh,
                        clazz=class_label_map[grid_map][i],
                        objectness=objectness_map.max(axis=0)[grid_map][i])
-            bboxes.append({'bounding_box': grid_to_yolo_coord(bbox, input_size),
+            bboxes.append({'bounding_box': grid_to_yolo_coord(bbox),
                            'grid_cell': grid_cells[i]})
         return bboxes
 
