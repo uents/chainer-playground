@@ -112,43 +112,43 @@ def safe_divide(dividend, divisor):
     return dividend / divisor
 
 # [real_width, real_height] => [input_size, input_size]
-def real_to_yolo_coord(box, width, height):
-    x = box.left * INPUT_SIZE / width
-    y = box.top * INPUT_SIZE / height
-    w = box.width * INPUT_SIZE / width
-    h = box.height * INPUT_SIZE / height
+def real_to_yolo_coord(box, width, height, input_size=INPUT_SIZE):
+    x = box.left * input_size / width
+    y = box.top * input_size / height
+    w = box.width * input_size / width
+    h = box.height * input_size / height
     return Box(x=x, y=y, width=w, height=h,
                clazz=box.clazz, objectness=box.objectness)
 
 # [input_size, input_size] => [grid_size, grid_size]
-def yolo_to_grid_coord(box):
-    x = box.left * N_GRID / INPUT_SIZE
-    y = box.top * N_GRID / INPUT_SIZE
-    w = box.width * N_GRID / INPUT_SIZE
-    h = box.height * N_GRID / INPUT_SIZE
+def yolo_to_grid_coord(box, input_size=INPUT_SIZE):
+    x = box.left * N_GRID / input_size
+    y = box.top * N_GRID / input_size
+    w = box.width * N_GRID / input_size
+    h = box.height * N_GRID / input_size
     return Box(x=x, y=y, width=w, height=h,
                clazz=box.clazz, objectness=box.objectness)
 
 # [grid_size, grid_size] => [input_size, input_size]
-def grid_to_yolo_coord(box):
-    x = box.left * INPUT_SIZE / N_GRID
-    y = box.top * INPUT_SIZE / N_GRID
-    w = box.width * INPUT_SIZE / N_GRID
-    h = box.height * INPUT_SIZE / N_GRID
+def grid_to_yolo_coord(box, input_size=INPUT_SIZE):
+    x = box.left * input_size / N_GRID
+    y = box.top * input_size / N_GRID
+    w = box.width * input_size / N_GRID
+    h = box.height * input_size / N_GRID
     return Box(x=x, y=y, width=w, height=h,
                clazz=box.clazz, objectness=box.objectness)
 
 # [input_size, input_size] => [real_width, real_height]
-def yolo_to_real_coord(box, width, height):
-    x = box.left * width / INPUT_SIZE
-    y = box.top * height / INPUT_SIZE
-    w = box.width * width / INPUT_SIZE
-    h = box.height * height / INPUT_SIZE
+def yolo_to_real_coord(box, width, height, input_size=INPUT_SIZE):
+    x = box.left * width / input_size
+    y = box.top * height / input_size
+    w = box.width * width / input_size
+    h = box.height * height / input_size
     return Box(x=x, y=y, width=w, height=h,
                clazz=box.clazz, objectness=box.objectness)
 
 # 推論結果をBounding Boxに変換
-def inference_to_bounding_boxes(tensors):
+def inference_to_bounding_boxes(tensors, anchor_boxes=ANCHOR_BOXES, input_size=INPUT_SIZE):
     def bboxes_of_anchor(tensor, anchor_box):
         px, py, pw, ph, pconf, pprob \
             = np.array_split(tensor, indices_or_sections=(1,2,3,4,5), axis=0)
@@ -180,12 +180,12 @@ def inference_to_bounding_boxes(tensors):
             bbox = Box(x=bx, y=by, width=bw, height=bh,
                        clazz=class_label_map[grid_map][i],
                        objectness=objectness_map.max(axis=0)[grid_map][i])
-            bboxes.append({'bounding_box': grid_to_yolo_coord(bbox),
+            bboxes.append({'bounding_box': grid_to_yolo_coord(bbox, input_size),
                            'grid_cell': grid_cells[i]})
         return bboxes
 
     return [bboxes_of_anchor(tensor, anchor_box)
-            for tensor, anchor_box in zip(tensors, ANCHOR_BOXES)]
+            for tensor, anchor_box in zip(tensors, anchor_boxes)]
 
 
 # 検出候補のBounding Boxを選定

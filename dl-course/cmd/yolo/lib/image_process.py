@@ -12,9 +12,8 @@ import numpy as np
 import cv2
 
 class Image():
-    def __init__(self, path, width, height):
+    def __init__(self, path, input_size):
         self.path = path
         image = cv2.imread(path)
         self.real_height, self.real_width, _ = image.shape
-#        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-        self.image = cv2.resize(image, (width, height))
+        self.image = cv2.resize(image, (input_size, input_size))

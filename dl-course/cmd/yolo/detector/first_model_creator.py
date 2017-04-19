@@ -68,7 +68,7 @@ if __name__ == '__main__':
     ダミーデータでの順伝播を実行する
     '''
     detector_model = YoloDetector(args.gpu)
-    dummy_image = np.random.randint(0, 255, size=(10,3,INPUT_SIZE,INPUT_SIZE)) / 255.
+    dummy_image = np.random.randint(0, 255, size=(10, 3, INPUT_SIZE, INPUT_SIZE)) / 255.
     xs = chainer.Variable(dummy_image.astype(np.float32))
     detector_model.forward(xs)
     copy_conv_layer(classifier_model, detector_model)

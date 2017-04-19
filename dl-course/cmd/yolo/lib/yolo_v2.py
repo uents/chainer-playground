@@ -92,7 +92,7 @@ class YoloClassifier(chainer.Chain):
             self.gpu = gpu
             self.to_gpu()
         self.train = False
-
+                 
     def forward(self, x):
         batch_size = x.data.shape[0]
 
@@ -149,7 +149,11 @@ class YoloDetector(chainer.Chain):
     '''
     YOLO Detector
     '''
-    def __init__(self, gpu=-1):
+    def __init__(self, gpu=-1, n_grid=N_GRID, anchor_boxes=ANCHOR_BOXES):
+        self.n_grid = n_grid
+        self.anchor_boxes = anchor_boxes
+        self.n_boxes = int(len(anchor_boxes))
+
         initializer = chainer.initializers.HeNormal()
         super(YoloDetector, self).__init__(
             # common layers with Darknet-19
@@ -227,9 +231,9 @@ class YoloDetector(chainer.Chain):
             bn21   = L.BatchNormalization(1024, use_beta=False, eps=2e-5),
             bias21 = L.Bias(shape=(1024,)),
             
-            conv22 = L.Convolution2D(None, N_BOXES * (5+N_CLASSES), ksize=1, stride=1, pad=0, nobias=True,
+            conv22 = L.Convolution2D(None, self.n_boxes * (5+N_CLASSES), ksize=1, stride=1, pad=0, nobias=True,
                                      initialW=initializer),
-            bias22 = L.Bias(shape=(N_BOXES* (5+N_CLASSES),)),
+            bias22 = L.Bias(shape=(self.n_boxes* (5+N_CLASSES),)),
         )
         self.gpu = -1
         if gpu >= 0:
@@ -279,7 +283,7 @@ class YoloDetector(chainer.Chain):
         h = self.bias22(self.conv22(h))
 
         # reshape output tensor
-        h = F.reshape(h, (batch_size, N_BOXES, 5+N_CLASSES, N_GRID, N_GRID))
+        h = F.reshape(h, (batch_size, self.n_boxes, 5+N_CLASSES, self.n_grid, self.n_grid))
         return h
 
     def reorg(self, h, stride=2):
@@ -337,7 +341,7 @@ class YoloDetector(chainer.Chain):
                 ious = np.asarray(ious)
                 best_ious.append(np.max(ious, axis=0))
 
-            best_ious = np.asarray(best_ious).reshape(batch_size, N_BOXES, 1, N_GRID, N_GRID)
+            best_ious = np.asarray(best_ious).reshape(batch_size, self.n_boxes, 1, self.n_grid, self.n_grid)
             _pconf = pconf.data
             if self.gpu >= 0: _pconf = _pconf.get()
             tconf[best_ious > CONFIDENCE_KEEP_THRESH] \
@@ -350,10 +354,10 @@ class YoloDetector(chainer.Chain):
                 for truth_box in ground_truths[batch]:
                     anchor_ious = np.asarray([Box.iou(Box(0., 0., anchor_box[0], anchor_box[1]),
                                                       Box(0., 0., truth_box.width, truth_box.height))
-                                              for anchor_box in ANCHOR_BOXES])
+                                              for anchor_box in self.anchor_boxes])
                     anchor_ix = np.argmax(anchor_ious)
-                    anchor_w = ANCHOR_BOXES[anchor_ix][0]
-                    anchor_h = ANCHOR_BOXES[anchor_ix][1]
+                    anchor_w = self.anchor_boxes[anchor_ix][0]
+                    anchor_h = self.anchor_boxes[anchor_ix][1]
                     
                     grid_x = int(math.modf(truth_box.center.x)[1])
                     grid_y = int(math.modf(truth_box.center.y)[1])
@@ -369,8 +373,8 @@ class YoloDetector(chainer.Chain):
                     pred_y = grid_y + py.data.get()[batch, anchor_ix, 0, grid_y, grid_x] - pred_h/2.
 #                    pred_x = max(grid_x + px.data.get()[batch, anchor_ix, 0, grid_y, grid_x] - pred_w/2., 0.)
 #                    pred_y = max(grid_y + py.data.get()[batch, anchor_ix, 0, grid_y, grid_x] - pred_h/2., 0.)
-#                    pred_w = min(pred_w, N_GRID - pred_w)
-#                    pred_h = min(pred_h, N_GRID - pred_h)
+#                    pred_w = min(pred_w, self.n_grid - pred_w)
+#                    pred_h = min(pred_h, self.n_grid - pred_h)
                     pred_box = Box(x=pred_x, y=pred_y, width=pred_w, height=pred_h)
                     pred_iou = Box.iou(pred_box, truth_box)
                     pred_ious.append(pred_iou)
@@ -414,10 +418,10 @@ class YoloDetector(chainer.Chain):
         return self.from_variable(h)
 
     def all_pred_boxes(self, px, py, pw, ph):
-        x_offsets = np.broadcast_to(np.arange(N_GRID).astype(np.float32), px.shape)
-        y_offsets = np.broadcast_to(np.arange(N_GRID).astype(np.float32), py.shape)
-        w_anchors = np.broadcast_to(np.reshape(np.array(ANCHOR_BOXES).astype(np.float32)[:,0], (N_BOXES,1,1,1)), pw.shape)
-        h_anchors = np.broadcast_to(np.reshape(np.array(ANCHOR_BOXES).astype(np.float32)[:,0], (N_BOXES,1,1,1)), ph.shape)
+        x_offsets = np.broadcast_to(np.arange(self.n_grid).astype(np.float32), px.shape)
+        y_offsets = np.broadcast_to(np.arange(self.n_grid).astype(np.float32), py.shape)
+        w_anchors = np.broadcast_to(np.reshape(np.array(self.anchor_boxes).astype(np.float32)[:,0], (self.n_boxes,1,1,1)), pw.shape)
+        h_anchors = np.broadcast_to(np.reshape(np.array(self.anchor_boxes).astype(np.float32)[:,0], (self.n_boxes,1,1,1)), ph.shape)
         if self.gpu >= 0:
             px, py, pw, ph = px.get(), py.get(), pw.get(), ph.get()
         return Box(x=px + x_offsets, y=py + y_offsets,

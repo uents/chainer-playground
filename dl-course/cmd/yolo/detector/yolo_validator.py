@@ -62,8 +62,15 @@ def validate(args):
     print('validate: gpu:%d class_prob_thresh:%1.2f nms_iou_thresh:%1.2f save_dir:%s' %
           (args.gpu, args.class_prob_thresh, args.nms_iou_thresh, SAVE_DIR))
 
+    # 推論モデルをパラメータをロード
+    params_file = os.path.join(os.path.split(args.model_file)[0], 'params.json')
+    with open(params_file, 'r') as fp:
+        params = json.load(fp)
+    n_grid = int(params['grid_cells'])
+    anchor_boxes = np.asarray(eval(params['anchor_boxes']))
+
     # 推論モデルをロード
-    model = YoloPredictor(args.gpu, args.model_file)
+    model = YoloPredictor(args.gpu, args.model_file, n_grid, anchor_boxes)
 
     # データセットの読み出し
     dataset = load_catalog(args.catalog_file)

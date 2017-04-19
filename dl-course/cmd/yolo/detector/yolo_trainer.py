@@ -46,7 +46,7 @@ def load_catalog(catalog_file):
 
 def load_dataset(image_paths, truth_boxes):
     def load(path, boxes):
-        image = Image(path, INPUT_SIZE, INPUT_SIZE)
+        image = Image(path, INPUT_SIZE)
         yolo_boxes = [real_to_yolo_coord(box, image.real_width, image.real_height)
                         for box in boxes]
         return {'image': image.image, 'truth': yolo_boxes}
@@ -143,7 +143,7 @@ def train_model(args):
 
         if not os.path.exists(SAVE_DIR):
             os.makedirs(SAVE_DIR)
-            save_learning_params(args)
+            save_learning_params(model, args)
 
         if (iter_count == 10) or (iter_count % 100 == 0) or (iter_count == args.iteration):
             cv_loss, cv_map, cv_recall = perform_cv(model, optimizer, cv_dataset)
@@ -170,7 +170,7 @@ def train_model(args):
         chainer.serializers.save_npz(os.path.join(SAVE_DIR, 'detector_final.model'), model)
         chainer.serializers.save_npz(os.path.join(SAVE_DIR, 'detector_final.state'), optimizer)
 
-    save_learning_params(args)
+    save_learning_params(model, args)
 
 
 def parse_arguments():
@@ -186,7 +186,7 @@ def parse_arguments():
     parser.add_argument('--start-iteration-count', '-s', type=int, dest='start_iter_count', default=1)
     return parser.parse_args()
 
-def save_learning_params(args):
+def save_learning_params(model, args):
     params = {
         'elapsed_time': {
             'start': START_TIME,
@@ -196,8 +196,8 @@ def save_learning_params(args):
             'train': args.train_catalog_file,
             'cv': args.cv_catalog_file
         },
-        'grid_cells': N_GRID,
-        'anchor_boxes': '{}'.format(ANCHOR_BOXES),
+        'grid_cells': model.n_grid,
+        'anchor_boxes': str(model.anchor_boxes.tolist()),
         'max_iterations': args.iteration,
         'batch_size': args.batch_size,
         'momentum': MOMENTUM,

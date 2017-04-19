@@ -19,8 +19,13 @@ from image_process import *
 
 
 class YoloPredictor(chainer.Chain):
-    def __init__(self, gpu=-1, model_file=''):
-        self.model = YoloDetector(gpu)
+    def __init__(self, gpu=-1, model_file='',
+                 n_grid=N_GRID, anchor_boxes=np.zeros((N_GRID,2))):
+        self.n_grid = n_grid
+        self.input_size = n_grid * GRID_SIZE
+        self.anchor_boxes = anchor_boxes
+
+        self.model = YoloDetector(gpu, n_grid, anchor_boxes)
         if len(model_file) > 0:
             print('load model: %s' % model_file)
             chainer.serializers.load_npz(model_file, self.model)
@@ -32,7 +37,7 @@ class YoloPredictor(chainer.Chain):
         batch_size = len(image_paths)
         
         # 画像リストをロード
-        images = [Image(path, INPUT_SIZE, INPUT_SIZE) for path in image_paths]
+        images = [Image(path, self.input_size) for path in image_paths]
         xs = [image.image for image in images]
 
         # 推論を実行
@@ -40,10 +45,12 @@ class YoloPredictor(chainer.Chain):
         tensors = self.model.predict(xs)
 
         # 推論結果をBounding Boxに変換
-        bounding_boxes = [inference_to_bounding_boxes(tensor) for tensor in tensors]
-        return [[[{ 'bounding_box': yolo_to_real_coord(bbox['bounding_box'],
-                                                       image.real_width, image.real_height),
-                    'grid_cell': bbox['grid_cell']}
+        bounding_boxes = [inference_to_bounding_boxes(tensor, self.anchor_boxes, self.input_size)
+                          for tensor in tensors]
+        return [[[{'bounding_box': yolo_to_real_coord(bbox['bounding_box'],
+                                                      image.real_width, image.real_height,
+                                                      self.input_size),
+                   'grid_cell': bbox['grid_cell']}
                   for bbox in bboxes_of_anchor]
                  for bboxes_of_anchor in bboxes_of_image]
                 for bboxes_of_image, image in zip(bounding_boxes, images)]

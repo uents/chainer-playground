@@ -11,9 +11,10 @@ import numpy as np
 N_CLASSES = 26  # 0..25
                 # F.softmax_cross_entropy()で扱うラベルが
                 # 0始まりの必要があるため、便宜的に0を追加
+GRID_SIZE = 32
 
-N_GRID = 7
-INPUT_SIZE = N_GRID * 32
+N_GRID = 9
+INPUT_SIZE = GRID_SIZE * N_GRID
 
 ANCHOR_BOXES = np.array([[0.32688071, 0.74313729],
                          [0.64044543, 0.79116386],

@@ -44,7 +44,7 @@ def load_catalog(catalog_file):
 
 def perform_train(model, optimizer, dataset):
     image_paths = np.asarray([item['color_image_path'] for item in dataset])
-    images = [Image(path, INPUT_SIZE, INPUT_SIZE).image for path in image_paths]
+    images = [Image(path, INPUT_SIZE).image for path in image_paths]
     # TODO: マルチラベル画像対応 (いらないかも)
     truth_labels = np.asarray([[int(clazz) for clazz in item['classes']] for item in dataset])
 
@@ -66,7 +66,7 @@ def perform_cv(model, optimizer, dataset):
     loss, acc = (0., 0.)
     for count in six.moves.range(0, n_valid, 10):
         ix = np.arange(count, min(count+10, n_valid))
-        images = [Image(path, INPUT_SIZE, INPUT_SIZE).image for path in image_paths[ix]]
+        images = [Image(path, INPUT_SIZE).image for path in image_paths[ix]]
 
         xs = chainer.Variable(xp.asarray(images).astype(np.float32).transpose(0,3,1,2) / 255.)
         ts = chainer.Variable(xp.asarray(truth_labels[ix].ravel()).astype(np.int32))
