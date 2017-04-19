@@ -80,11 +80,12 @@ def validate(args):
     for count in six.moves.range(0, n_valid, 10):
         # 推論を実行
         ix = np.arange(count, min(count+10, n_valid))
+        truth_boxes = real_truth_boxes[ix]
         image_paths = [image['path'] for image in images[ix]]
+
         bounding_boxes = model.predict(image_paths)
 
         # バウンディングボックスの絞り込み
-        truth_boxes = real_truth_boxes[ix]
         for batch in six.moves.range(0, len(ix)):
             candidates = select_candidates(bounding_boxes[batch], args.class_prob_thresh)
             winners = nms(candidates, args.nms_iou_thresh)
@@ -96,6 +97,7 @@ def validate(args):
                 print('{0} {1} {2:.3f} pred:{3} truth:{4}'.format(
                     count+batch+1, correct, iou, winner, truth_boxes[batch]))
                 result_image = overlay_bounding_box(result_image, winner, correct, iou)
+
             result_image_path = os.path.join(SAVE_DIR,
                 '{}_{}.png'.format(images[ix][batch]['classes'], images[ix][batch]['pattern_id']))
             cv2.imwrite(result_image_path, result_image)
