@@ -28,8 +28,6 @@ def load_catalog(catalog_file):
 class Metrics():
     def __init__(self, catalog_file=''):
         dataset = load_catalog(catalog_file)
-        truth_boxes = np.asarray([[dict_to_box(box) for box in item['bounding_boxes']]
-                                  for item in dataset])
         self.mean_ap = 0.
         self.recall = 0.
 
@@ -39,7 +37,11 @@ class Metrics():
                                    'average_iou', 'sum_iou'])
         df['class'] = np.arange(1, N_CLASSES)
         df = df.set_index('class').fillna(0)
-        df.ix[:, 'total'] = [len(filter(lambda box: box.clazz == clazz, truth_boxes.ravel()))
+
+        truth_boxes = reduce(lambda x, y: x + y,
+                             [[dict_to_box(box) for box in item['bounding_boxes']]
+                              for item in dataset])
+        df.ix[:, 'total'] = [len(filter(lambda box: box.clazz == clazz, truth_boxes))
                              for clazz in df.index]
         self.df = df
 
