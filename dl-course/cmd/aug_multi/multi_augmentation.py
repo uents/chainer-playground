@@ -59,7 +59,7 @@ def find_color_by_class(df, clazz=0):
     return int(df.ix[int(clazz),'r']), \
             int(df.ix[int(clazz),'g']), int(df.ix[int(clazz),'b'])
 
-def single_augmentation(args):
+def multi_augmentation(args):
     dataset = load_catalog(args.catalog_file)
     items = [Item(item) for item in dataset]
     bg_image_paths = [path for path in find_bitmap(args.bg_image_dir)]
@@ -69,41 +69,56 @@ def single_augmentation(args):
     for count in six.moves.range(1, args.number+1):
         # 背景画像を無作為に抽出
         bg_image_path = np.random.choice(bg_image_paths)
-        bg_image = cv2.imread(bg_image_path)
+        new_color_image = cv2.imread(bg_image_path)
+
+        # ラベル画像用に黒背景を生成
+        new_label_image = np.tile(0, new_color_image.shape).astype(np.uint8)
+
+        # サンプリング数を決定 (2〜4)
+        n_sampling = np.random.randint(2, 5))
 
         # オブジェクト画像を無作為に抽出
-        item = np.random.choice(items)
-        sys.stdout.write('\r%d process %s' % (count, item.color_image_path))
-        sys.stdout.flush()
-        obj_image = extract_object_image(
-            item.color_image_path, item.label_image_path, item.bounding_box)
+        obj_images = []
+        for i in range(0, n_sampling):
+            item = np.random.choice(items)
+            sys.stdout.write('\r%d process %s' % (count, item.color_image_path))
+            sys.stdout.flush()
+            obj_image = extract_object_image(
+                item.color_image_path, item.label_image_path, item.bounding_box)
+            obj_images.append(obj_image)
 
-        # オブジェクト画像を回転・拡縮
-        if args.with_scaling:
-            obj_image = rotate_image(obj_image,
-                            random.choice([0, 0, 90, -90, 180]))
-        if args.with_scaling:
-            obj_image = scale_image(obj_image, random.uniform(0.9, 1.1))
+        for i in range(0, np.random.randint(2, 5)):
+            # オブジェクト画像を無作為に抽出
+            item = np.random.choice(items)
+            sys.stdout.write('\r%d process %s' % (count, item.color_image_path))
+            sys.stdout.flush()
+            obj_image = extract_object_image(
+                item.color_image_path, item.label_image_path, item.bounding_box)
 
-        # オブジェクト画像と背景画像を合成 (合成座標もここで決定)
-        new_color_image, bbox = overlay_image(obj_image, bg_image)
+            # オブジェクト画像を回転・拡縮
+            if args.with_scaling:
+                obj_image = rotate_image(obj_image, random.choice([0, 0, 90, -90, 180]))
+            if args.with_scaling:
+                obj_image = scale_image(obj_image, random.uniform(0.9, 1.1))
 
-        # ラベル画像を生成
-        r,g,b = find_color_by_class(df_class_color_table, item.clazz)
-        label_image = obj_image.copy()
-        label_image[obj_image[:,:,3] > 0] = [r,g,b,255]
+            # オブジェクト画像を合成 (合成座標もここで決定)
+            new_color_image, bbox = overlay_image(obj_image, new_color_image)
 
-        # ラベル画像と黒画像を合成
-        black_image = np.tile(0, bg_image.shape).astype(np.uint8)
-        new_label_image, _ = overlay_image(
-            label_image, black_image, (bbox.left, bbox.top))
+            # ラベル画像を生成
+            r,g,b = find_color_by_class(df_class_color_table, item.clazz)
+            label_image = obj_image.copy()
+            label_image[obj_image[:,:,3] > 0] = [r,g,b,255]
 
-        # バウンディングボックスを画像内に収まるように補正
-        h, w = new_color_image.shape[:2]
-        bx = max(bbox.left, 0)
-        by = max(bbox.top, 0)
-        bw = min(bbox.width, bbox.width + bbox.left, w - bbox.left, w)
-        bh = min(bbox.height, bbox.height + bbox.top, h - bbox.top, h)
+            # ラベル画像を合成
+            new_label_image, _ = overlay_image(
+                label_image, new_label_image, (bbox.left, bbox.top))
+
+            # バウンディングボックスを画像内に収まるように補正
+            h, w = new_color_image.shape[:2]
+            bx = max(bbox.left, 0)
+            by = max(bbox.top, 0)
+            bw = min(bbox.width, bbox.width + bbox.left, w - bbox.left, w)
+            bh = min(bbox.height, bbox.height + bbox.top, h - bbox.top, h)
 
         # 画像サイズを1/2にする
         new_color_image = cv2.resize(new_color_image, (w/2, h/2), cv2.INTER_LINEAR)
@@ -152,5 +167,5 @@ def parse_arguments():
 
 if __name__ == '__main__':
     args = parse_arguments()
-    single_augmentation(args)
+    multi_augmentation(args)
     print('done')
