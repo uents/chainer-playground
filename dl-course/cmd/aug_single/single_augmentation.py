@@ -88,10 +88,9 @@ def single_augmentation(args):
         # オブジェクト画像と背景画像を合成 (合成座標もここで決定)
         new_color_image, bbox = overlay_image(obj_image, bg_image)
 
-        # ラベル画像を生成
-        r,g,b = find_color_by_class(df_class_color_table, item.clazz)
+        r, g, b = find_color_by_class(df_class_color_table, item.clazz)
         label_image = obj_image.copy()
-        label_image[obj_image[:,:,3] > 0] = [r,g,b,255]
+        label_image[obj_image[:,:,3] > 0] = [b, g, r, 255]
 
         # ラベル画像と黒画像を合成
         black_image = np.tile(0, bg_image.shape).astype(np.uint8)
@@ -120,7 +119,7 @@ def single_augmentation(args):
         new_color_image_path = os.path.join(dir_path, prefix + '_color.bmp')
         new_label_image_path = os.path.join(dir_path, prefix + '_label.bmp')
         cv2.imwrite(new_color_image_path, new_color_image)
-#        cv2.imwrite(new_label_image_path, new_label_image)
+        cv2.imwrite(new_label_image_path, new_label_image)
 
         # カタログ情報に追加
         new_dataset.append({

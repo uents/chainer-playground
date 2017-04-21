@@ -15,7 +15,7 @@ class Box():
         self.clazz = clazz
 
     def __repr__(self):
-        return '<Box x:%4.1f y:%4.1f w:%4.1f h:%4.1f c:%d>' % \
+        return '<Box x:%d y:%d w:%d h:%d c:%d>' % \
             (self.left, self.top, self.width, self.height, self.clazz)
 
     @property
