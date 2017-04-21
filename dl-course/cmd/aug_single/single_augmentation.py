@@ -133,10 +133,10 @@ def single_augmentation(args):
             }]
         })
 
-    catalog_path = os.path.join(args.output_dir, 'single_aug_catalog.json')
-    with open(catalog_path, 'w') as fp:
-        json.dump({'dataset': new_dataset}, fp,
-            sort_keys=True, ensure_ascii=False, indent=2)
+        catalog_path = os.path.join(args.output_dir, 'catalog.json')
+        with open(catalog_path, 'w') as fp:
+            json.dump({'dataset': new_dataset}, fp,
+                      sort_keys=True, ensure_ascii=False, indent=2)
 
 def parse_arguments():
     description = 'data augmentation for single images'

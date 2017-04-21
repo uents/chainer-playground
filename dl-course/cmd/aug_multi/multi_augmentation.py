@@ -98,30 +98,32 @@ def multi_augmentation(args):
 
         # オブジェクトの配置を決定
         bboxes = []
-        for i in range(0, len(obj_images)):
-            oh, ow = obj_images[i].shape[:2]
-            if i == 0:
-                if len(obj_images) >= 2:
-                    kind = np.random.randint(0,3)
-                    if kind == 0:
-                        ox = 0
-                    elif kind == 1:
-                        ox = bw - get_total_width(obj_images)
-                    else:
-                        ox = bw - get_total_width(obj_images)/2
-                else:
-                    ox = int(random.uniform(0., bw-ow))
+
+        oh, ow = obj_images[0].shape[:2]
+        if len(obj_images) >= 2:
+            kind = np.random.randint(0,3)
+            if kind == 0:
+                ox = 0
+            elif kind == 1:
+                ox = bw - get_total_width(obj_images)
             else:
-                ox = bboxes[i-1].right
+                ox = (bw - get_total_width(obj_images))/2
+        else:
+            ox = int(random.uniform(0., bw-ow))
+        oy = int(random.uniform(0.85*bh - oh, 0.95*bh - oh))
+        bboxes.append(Box(x=ox, y=oy, w=ow, h=oh, clazz=items[0].clazz))
+
+        for i in range(1, len(obj_images)):
+            oh, ow = obj_images[i].shape[:2]
+            ox = bboxes[i-1].right
             oy = int(random.uniform(0.85*bh - oh, 0.95*bh - oh))
             bboxes.append(Box(x=ox, y=oy, w=ow, h=oh, clazz=items[i].clazz))
 
+        # オブジェクト画像、ラベル画像を合成
         new_bboxes = []
         for obj_image, bbox in zip(obj_images, bboxes):
-            # オブジェクト画像、ラベル画像を合成
             new_color_image, _ = overlay_image(obj_image, new_color_image,
                                                (bbox.left, bbox.top))
-
             r, g, b = find_color_by_class(df_class_color_table, bbox.clazz)
             label_image = obj_image.copy()
             label_image[obj_image[:,:,3] > 0] = [b, g, r, 255]
@@ -130,8 +132,11 @@ def multi_augmentation(args):
 
             # バウンディングボックスを画像内に収まるように補正
             # (サイズは先に1/2しておく)
-            new_bboxes.append(Box(x=max(bbox.left/2, 0),  y=max(bbox.top/2, 0),
-                                  w=bbox.width/2, h=bbox.height/2, clazz=bbox.clazz))
+            new_bboxes.append(Box(x=max(bbox.left/2, 0),
+                                  y=max(bbox.top/2, 0),
+                                  w=min(bbox.width/2,  bbox.width/2 + bbox.left/2, (bw - bbox.left)/2, bw/2),
+                                  h=min(bbox.height/2, bbox.height/2 + bbox.top/2, (bh - bbox.top)/2,  bh/2),
+                                  clazz=bbox.clazz))
 
         # 画像サイズを1/2にする
         new_color_image = cv2.resize(new_color_image, (bw/2, bh/2), cv2.INTER_LINEAR)
@@ -161,10 +166,10 @@ def multi_augmentation(args):
             } for bbox in new_bboxes]
         })
 
-    catalog_path = os.path.join(args.output_dir, 'multi_aug_catalog.json')
-    with open(catalog_path, 'w') as fp:
-        json.dump({'dataset': new_dataset}, fp,
-            sort_keys=True, ensure_ascii=False, indent=2)
+        catalog_path = os.path.join(args.output_dir, 'catalog.json')
+        with open(catalog_path, 'w') as fp:
+            json.dump({'dataset': new_dataset}, fp,
+                      sort_keys=True, ensure_ascii=False, indent=2)
 
 def parse_arguments():
     description = 'data augmentation for single images'
