@@ -93,10 +93,8 @@ def multi_augmentation(args):
             obj_images.append(obj_image)
 
         # 全体に収まるまでオブジェクト数を調整する
-        while get_total_width(obj_images) > bw:
+        while len(obj_images) > 1 and get_total_width(obj_images) > bw:
             del obj_images[-1]
-            if len(obj_images):
-                continue
 
         # オブジェクトの配置を決定
         bboxes = []
