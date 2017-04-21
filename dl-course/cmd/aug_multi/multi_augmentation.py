@@ -161,7 +161,7 @@ def multi_augmentation(args):
             } for bbox in new_bboxes]
         })
 
-    catalog_path = os.path.join(args.output_dir, 'single_aug_catalog.json')
+    catalog_path = os.path.join(args.output_dir, 'multi_aug_catalog.json')
     with open(catalog_path, 'w') as fp:
         json.dump({'dataset': new_dataset}, fp,
             sort_keys=True, ensure_ascii=False, indent=2)
