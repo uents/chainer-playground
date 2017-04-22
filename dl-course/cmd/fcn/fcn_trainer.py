@@ -60,7 +60,7 @@ def perform_train(model, optimizer, dataset):
     labels = [indexed_label_image(image) for image in label_images]
 
     xs = chainer.Variable(xp.asarray(images).transpose(0,3,1,2).astype(np.float32) / 255.)
-    ts = chainer.Variable(np.asarray(labels).astype(np.int32))
+    ts = chainer.Variable(xp.asarray(labels).astype(np.int32))
 
     model.train = True
     optimizer.update(model, xs, ts)
