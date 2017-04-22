@@ -69,7 +69,9 @@ def multi_augmentation(args):
     df_class_color_table = load_class_table()
 
     new_dataset = []
-    for count in six.moves.range(1, args.number+1):
+    count = 1
+
+    while count < args.number+1:
         # 背景画像を無作為に抽出
         bg_image_path = np.random.choice(bg_image_paths)
         new_color_image = cv2.imread(bg_image_path)
@@ -79,7 +81,7 @@ def multi_augmentation(args):
         new_label_image = np.tile(0, new_color_image.shape).astype(np.uint8)
 
         # データを無作為に抽出
-        items = np.random.choice(all_items, size=args.sampling)
+        items = np.random.choice(all_items, size=args.max_sampling)
 
         # オブジェクト画像を生成
         obj_images = []
@@ -95,6 +97,8 @@ def multi_augmentation(args):
         # 全体に収まるまでオブジェクト数を調整する
         while len(obj_images) > 1 and get_total_width(obj_images) > bw:
             del obj_images[-1]
+        if len(obj_images) < args.min_sampling:
+            continue
 
         # オブジェクトの配置を決定
         bboxes = []
@@ -140,6 +144,7 @@ def multi_augmentation(args):
 
         # 画像サイズを1/2にする
         new_color_image = cv2.resize(new_color_image, (bw/2, bh/2), cv2.INTER_LINEAR)
+#        new_color_image = random_hsv_image(new_color_image)
         new_label_image = cv2.resize(new_label_image, (bw/2, bh/2), cv2.INTER_LINEAR)
 
         # 保存先のディレクトリを作成
@@ -170,15 +175,17 @@ def multi_augmentation(args):
         with open(catalog_path, 'w') as fp:
             json.dump({'dataset': new_dataset}, fp,
                       sort_keys=True, ensure_ascii=False, indent=2)
+        count += 1
 
 def parse_arguments():
     description = 'data augmentation for single images'
     parser = argparse.ArgumentParser(description=description)
     parser.add_argument('--catalog-file', type=str, dest='catalog_file', default='', required=True)
     parser.add_argument('--bg-image-dir', type=str, dest='bg_image_dir', default='', required=True)
-    parser.add_argument('--output-dir', type=str, dest='output_dir', default='Single')
+    parser.add_argument('--output-dir', type=str, dest='output_dir', default='aug')
     parser.add_argument('--number', '-n', type=int, dest='number', default=1)
-    parser.add_argument('--sampling', '-s', type=int, dest='sampling', default=4)    
+    parser.add_argument('--max-sampling', type=int, dest='max_sampling', default=4)
+    parser.add_argument('--min-sampling', type=int, dest='min_sampling', default=1)
     parser.add_argument('--with-rotation', type=bool, dest='with_rotation', default=True)
     parser.add_argument('--with-scaling', type=bool, dest='with_scaling', default=True)
     return parser.parse_args()
