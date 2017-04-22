@@ -122,7 +122,7 @@ def train_model(args):
             os.makedirs(SAVE_DIR)
             save_learning_params(model, args)
 
-        if (iter_count == 1) or (iter_count % 50 == 0) or (iter_count == args.iteration):
+        if (iter_count == 10) or (iter_count % 50 == 0) or (iter_count == args.iteration):
             cv_loss, cv_pixel_acc = perform_cv(model, optimizer, cv_dataset)
             print('iter:%d trian loss:%f acc:%f cv loss:%f acc:%f' %
                   (iter_count, train_loss, train_pixel_acc, cv_loss, cv_pixel_acc))
