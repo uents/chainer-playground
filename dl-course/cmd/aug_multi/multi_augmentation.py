@@ -144,7 +144,8 @@ def multi_augmentation(args):
 
         # 画像サイズを1/2にする
         new_color_image = cv2.resize(new_color_image, (bw/2, bh/2), cv2.INTER_LINEAR)
-#        new_color_image = random_hsv_image(new_color_image)
+#        new_color_image = random_hsv_image(new_color_image,
+#                                delta_hue=0.01, delta_sat_scale=0.05, delta_val_scale=0.1)
         new_label_image = cv2.resize(new_label_image, (bw/2, bh/2), cv2.INTER_LINEAR)
 
         # 保存先のディレクトリを作成

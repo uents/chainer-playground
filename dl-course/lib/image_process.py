@@ -35,7 +35,7 @@ def scale_image(image, scale):
 def rotate_image(image, angle):
     return scipy.ndimage.rotate(image, angle, reshape=True)
 
-def random_hsv_image(image, delta_hue=0.02, delta_sat_scale=0.2, delta_val_scale=0.2):
+def random_hsv_image(image, delta_hue=0.01, delta_sat_scale=0.05, delta_val_scale=0.1):
     hsv_image = cv2.cvtColor(image, cv2.COLOR_BGR2HSV).astype(np.float32)
     # hue
     hsv_image[:,:,0] += int((np.random.rand() * delta_hue * 2 - delta_hue) * 255)
