@@ -108,7 +108,6 @@ def perform_cv(model, optimizer, dataset):
 
     metrics.update()
     print(metrics.df)
-    print('map:%f recall:%f' % (metrics.mean_ap, metrics.recall))
     return loss, metrics.mean_ap, metrics.recall
 
 def train_model(args):
@@ -163,7 +162,7 @@ def train_model(args):
             with open(os.path.join(SAVE_DIR, 'train_log.csv'), 'w') as fp:
                 df_logs.to_csv(fp, encoding='cp932', index=False)
 
-        if iter_count % 1000 == 0:
+        if (iter_count >= 4000) and (iter_count % 500 == 0):
             chainer.serializers.save_npz(
                 os.path.join(SAVE_DIR, 'detector_iter{}.model'.format(str(iter_count).zfill(5))), model)
             chainer.serializers.save_npz(
@@ -172,7 +171,6 @@ def train_model(args):
     if len(train_dataset) > 0:
         chainer.serializers.save_npz(os.path.join(SAVE_DIR, 'detector_final.model'), model)
         chainer.serializers.save_npz(os.path.join(SAVE_DIR, 'detector_final.state'), optimizer)
-
     save_learning_params(model, args)
 
 

@@ -5,7 +5,6 @@ from __future__ import print_function
 import six
 import sys
 import os
-import argparse
 import math
 import random
 import numpy as np
@@ -16,4 +15,5 @@ class Image():
         self.path = path
         image = cv2.imread(path)
         self.real_height, self.real_width, _ = image.shape
-        self.image = cv2.resize(image, (input_size, input_size))
+        self.image = cv2.resize(image, (input_size, input_size),
+                                interpolation=cv2.INTER_LINEAR)
