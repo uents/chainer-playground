@@ -139,7 +139,9 @@ class Fcn(chainer.Chain):
         h, _, _ = self.forward(x)
         self.loss = F.softmax_cross_entropy(h, t)
         self.pixel_acc = self.pixel_accuracy(h, t)
-        self.h = F.softmax(h)
+        self.pred = None
+        if not self.train:
+            self.pred = np.argmax(F.softmax(h).data, axis=1)
         return self.loss
 
     def pixel_accuracy(self, h, t):

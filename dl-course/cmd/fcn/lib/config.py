@@ -17,4 +17,12 @@ INPUT_SIZE = 160
 
 
 # training configurations
+MOMENTUM = 0.9
 WEIGHT_DECAY = 0.005
+
+LR_SCHEDULES = {
+    '1': 1e-6,
+    '101': 1e-5,
+    '4001': 3e-6,
+    '7001': 1e-6,
+}

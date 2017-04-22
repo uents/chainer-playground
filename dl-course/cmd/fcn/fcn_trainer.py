@@ -67,44 +67,24 @@ def perform_train(model, optimizer, dataset):
     return model.loss.data, model.pixel_acc
 
 def perform_cv(model, optimizer, dataset):
-#    metrics = Metrics(args.cv_catalog_file)
-
     n_valid = len(dataset)
     if n_valid == 0: return 0., 0.
 
-    image_paths = np.asarray([item['color_image_path'] for item in dataset])
-    real_truth_boxes = np.asarray([[dict_to_box(box) for box in item['bounding_boxes']]
-                                    for item in dataset])
-    loss = 0.
+    images = np.asarray([Image(item['color_image_path'], INPUT_SIZE).image for item in dataset])
+    label_images = [Image(item['label_image_path'], INPUT_SIZE).image for item in dataset]
+    labels = np.asarray([indexed_label_image(image) for image in label_images])
+    
+    loss, pixel_acc = 0., 0.
     for count in six.moves.range(0, n_valid, 10):
         ix = np.arange(count, min(count+10, n_valid))
-        images, truth_boxes = load_dataset(image_paths[ix], real_truth_boxes[ix])
-
-        xs = chainer.Variable(xp.asarray(images).transpose(0,3,1,2).astype(np.float32) / 255.)
-        ts = [[yolo_to_grid_coord(box) for box in boxes] for boxes in truth_boxes]
+        xs = chainer.Variable(xp.asarray(images[ix]).transpose(0,3,1,2).astype(np.float32) / 255.)
+        ts = chainer.Variable(xp.asarray(labels[ix]).astype(np.int32))
 
         model.train = False
         model(xs, ts)
         loss += model.loss.data * len(ix) / n_valid
-        tensors = model.h
-
-        for batch in six.moves.range(0, len(ix)):
-            bounding_boxes = inference_to_bounding_boxes(tensors[batch])
-            candidates = select_candidates(bounding_boxes, CLASS_PROBABILITY_THRESH)
-            winners = nms(candidates, NMS_IOU_THRESH)
-#            metrics.validate_bounding_boxes(winners, truth_boxes[batch])
-
-            for winner in winners:
-                correct, iou = Box.correct(winner, truth_boxes[batch])
-                print('{0} {1} {2:.3f} pred:{3} truth:{4}'.format(
-                    count+batch+1, correct, iou, winner, truth_boxes[batch]))
-
-    return loss
-#    metrics.update()
-#    print(metrics.df)
-#    print('map:%f recall:%f' % (metrics.mean_ap, metrics.recall))
-#    return loss, metrics.mean_ap, metrics.recall
-
+        pixel_acc += model.pixel_acc * len(ix) / n_valid
+    return loss, pixel_acc
 
 def train_model(args):
     print('train: gpu:%d iteration:%d batch_size:%d save_dir:%s' % \
@@ -115,7 +95,8 @@ def train_model(args):
         print('load model: %s' % (args.model_file))
         chainer.serializers.load_npz(args.model_file, model)
 
-    optimizer = chainer.optimizers.Adam()
+#    optimizer = chainer.optimizers.Adam()
+    optimizer = chainer.optimizers.MomentumSGD(lr=LR_SCHEDULES['1'], momentum=MOMENTUM)
     optimizer.setup(model)
     optimizer.add_hook(chainer.optimizer.WeightDecay(WEIGHT_DECAY))
     optimizer.use_cleargrads()
@@ -130,8 +111,10 @@ def train_model(args):
     logs = []
     for iter_count in six.moves.range(args.start_iter_count,
                                       args.start_iter_count+args.iteration):
+        if str(iter_count) in LR_SCHEDULES:
+            optimizer.lr = LR_SCHEDULES[str(iter_count)]
+    
         batch_dataset = np.random.choice(train_dataset, args.batch_size)
-
         train_loss, train_pixel_acc = perform_train(model, optimizer, batch_dataset)
         print('mini-batch:%d loss:%f pix_acc:%f' % (iter_count, train_loss, train_pixel_acc))
 
@@ -139,24 +122,24 @@ def train_model(args):
             os.makedirs(SAVE_DIR)
             save_learning_params(model, args)
 
-        '''
-        if (iter_count == 10) or (iter_count % 100 == 0) or (iter_count == args.iteration):
-            cv_loss, cv_map, cv_recall = perform_cv(model, optimizer, cv_dataset)
-            print('iter:%d trian loss:%f cv loss:%f map:%f recall:%f' %
-                  (iter_count, train_loss, cv_loss, cv_map, cv_recall))
+        if (iter_count == 1) or (iter_count % 50 == 0) or (iter_count == args.iteration):
+            cv_loss, cv_pixel_acc = perform_cv(model, optimizer, cv_dataset)
+            print('iter:%d trian loss:%f acc:%f cv loss:%f acc:%f' %
+                  (iter_count, train_loss, train_pixel_acc, cv_loss, cv_pixel_acc))
             logs.append({
                 'iteration': str(iter_count),
-                'train_loss': str(train_loss), 'cv_loss': str(cv_loss),
-                'cv_map': str(cv_map), 'cv_recall': str(cv_recall)
+                'train_loss': str(train_loss),
+                'cv_loss': str(cv_loss),
+                'train_pixel_acc': str(train_pixel_acc),
+                'cv_pixel_acc': str(cv_pixel_acc)
             })
 
             df_logs = pd.DataFrame(logs,
-                        columns=['iteration', 'train_loss', 'cv_loss', 'cv_map', 'cv_recall'])
+                        columns=['iteration', 'train_loss', 'cv_loss', 'train_pixel_acc', 'cv_pixel_acc'])
             with open(os.path.join(SAVE_DIR, 'train_log.csv'), 'w') as fp:
                 df_logs.to_csv(fp, encoding='cp932', index=False)
-        '''
 
-        if (iter_count >= 4000) and (iter_count % 500 == 0):
+        if iter_count % 500 == 0:
             chainer.serializers.save_npz(
                 os.path.join(SAVE_DIR, 'iter{}.model'.format(str(iter_count).zfill(5))), model)
             chainer.serializers.save_npz(
