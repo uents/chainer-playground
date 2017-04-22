@@ -23,7 +23,7 @@ sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '
 from config import *
 from yolo_predictor import *
 from bounding_box import *
-from image_process import *
+from image import *
 from metrics import *
 
 xp = np

@@ -84,7 +84,7 @@ class YoloClassifier(chainer.Chain):
             bn18   = L.BatchNormalization(1024, use_beta=False, eps=2e-5),
             bias18 = L.Bias(shape=(1024,)),
 
-            # additonal layer for pretraining
+            # additonal layer for pre-training
             conv19 = L.Convolution2D(None, N_CLASSES, ksize=1, stride=1, pad=0)
         )
         self.gpu = -1
@@ -92,7 +92,7 @@ class YoloClassifier(chainer.Chain):
             self.gpu = gpu
             self.to_gpu()
         self.train = False
-                 
+
     def forward(self, x):
         batch_size = x.data.shape[0]
 
@@ -230,7 +230,7 @@ class YoloDetector(chainer.Chain):
                                      initialW=initializer),
             bn21   = L.BatchNormalization(1024, use_beta=False, eps=2e-5),
             bias21 = L.Bias(shape=(1024,)),
-            
+
             conv22 = L.Convolution2D(None, self.n_boxes * (5+N_CLASSES), ksize=1, stride=1, pad=0, nobias=True,
                                      initialW=initializer),
             bias22 = L.Bias(shape=(self.n_boxes* (5+N_CLASSES),)),
@@ -268,7 +268,7 @@ class YoloDetector(chainer.Chain):
         h = F.leaky_relu(self.bias13(self.bn13(self.conv13(h), test=not self.train)), slope=0.1)
         high_res_feature = self.reorg(h)
         h = F.max_pooling_2d(h, ksize=2, stride=2, pad=0)
-        
+
         h = F.leaky_relu(self.bias14(self.bn14(self.conv14(h), test=not self.train)), slope=0.1)
         h = F.leaky_relu(self.bias15(self.bn15(self.conv15(h), test=not self.train)), slope=0.1)
         h = F.leaky_relu(self.bias16(self.bn16(self.conv16(h), test=not self.train)), slope=0.1)
@@ -292,7 +292,7 @@ class YoloDetector(chainer.Chain):
             = int(in_height/stride), int(in_width/stride), in_channel*stride*stride
         out = F.transpose(
             F.reshape(h, (batch_size, in_channel, out_height, stride, out_width, stride)),
-            (0, 1, 2, 4, 3, 5)) 
+            (0, 1, 2, 4, 3, 5))
         out = F.transpose(
             F.reshape(out, (batch_size, in_channel, out_height, out_width, -1)),
             (0, 4, 1, 2, 3))
@@ -358,7 +358,7 @@ class YoloDetector(chainer.Chain):
                     anchor_ix = np.argmax(anchor_ious)
                     anchor_w = self.anchor_boxes[anchor_ix][0]
                     anchor_h = self.anchor_boxes[anchor_ix][1]
-                    
+
                     grid_x = int(math.modf(truth_box.center.x)[1])
                     grid_y = int(math.modf(truth_box.center.y)[1])
                     tx[batch, anchor_ix, :, grid_y, grid_x] = math.modf(truth_box.center.x)[0]
@@ -386,7 +386,7 @@ class YoloDetector(chainer.Chain):
 
             if self.train:
                 print(np.sort(np.asarray(pred_ious))[::-1].ravel())
-                
+
         # 損失誤差を算出
         tx, ty, tw, th = self.to_variable(tx), self.to_variable(ty), \
                          self.to_variable(tw), self.to_variable(th)
@@ -435,4 +435,3 @@ class YoloDetector(chainer.Chain):
         if self.gpu >= 0:
             v = chainer.cuda.to_gpu(v)
         return chainer.Variable(v)
-

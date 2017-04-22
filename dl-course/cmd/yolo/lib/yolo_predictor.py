@@ -16,7 +16,7 @@ sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '
 from config import *
 from yolo_v2 import *
 from bounding_box import *
-from image_process import *
+from image import *
 
 
 class YoloPredictor(chainer.Chain):

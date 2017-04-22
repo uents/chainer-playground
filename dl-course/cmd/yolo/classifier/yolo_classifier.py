@@ -21,7 +21,7 @@ import chainer.links as L
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'lib'))
 from config import *
 from yolo_v2 import *
-from image_process import *
+from image import *
 
 xp = np
 

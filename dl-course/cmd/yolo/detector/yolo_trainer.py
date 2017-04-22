@@ -20,11 +20,14 @@ import chainer
 import chainer.functions as F
 import chainer.links as L
 
+sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', '..', 'lib'))
+from image_process import *
+
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'lib'))
 from config import *
 from yolo_v2 import *
 from bounding_box import *
-from image_process import *
+from image import *
 from metrics import *
 
 xp = np
@@ -49,7 +52,7 @@ def load_dataset(image_paths, truth_boxes):
         image = Image(path, INPUT_SIZE)
         yolo_boxes = [real_to_yolo_coord(box, image.real_width, image.real_height)
                         for box in boxes]
-        return {'image': image.image, 'truth': yolo_boxes}
+        return {'image': random_hsv_image(image.image), 'truth': yolo_boxes}
 
     dataset = [load(path, boxes) for path, boxes in zip(image_paths, truth_boxes)]
     images = np.asarray([item['image'] for item in dataset])
