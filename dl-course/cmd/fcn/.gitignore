@@ -1,0 +1,8 @@
+snapshot_*/
+valid_*/
+.DS_Store
+*.npz
+*.model
+*.state
+*.json
+*.csv
