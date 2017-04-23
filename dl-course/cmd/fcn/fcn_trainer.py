@@ -95,11 +95,11 @@ def train_model(args):
         print('load model: %s' % (args.model_file))
         chainer.serializers.load_npz(args.model_file, model)
 
-#    optimizer = chainer.optimizers.Adam()
-    optimizer = chainer.optimizers.MomentumSGD(lr=LR_SCHEDULES['1'], momentum=MOMENTUM)
+    optimizer = chainer.optimizers.Adam()
+#    optimizer = chainer.optimizers.MomentumSGD(lr=LR_SCHEDULES['1'], momentum=MOMENTUM)
     optimizer.setup(model)
-    optimizer.add_hook(chainer.optimizer.WeightDecay(WEIGHT_DECAY))
-    optimizer.use_cleargrads()
+#    optimizer.add_hook(chainer.optimizer.WeightDecay(WEIGHT_DECAY))
+#    optimizer.use_cleargrads()
     if len(args.optimizer_file) > 0:
         print('load optimizer: %s' % (args.optimizer_file))
         chainer.serializers.load_npz(args.optimizer_file, optimizer)
@@ -111,8 +111,8 @@ def train_model(args):
     logs = []
     for iter_count in six.moves.range(args.start_iter_count,
                                       args.start_iter_count+args.iteration):
-        if str(iter_count) in LR_SCHEDULES:
-            optimizer.lr = LR_SCHEDULES[str(iter_count)]
+#        if str(iter_count) in LR_SCHEDULES:
+#            optimizer.lr = LR_SCHEDULES[str(iter_count)]
     
         batch_dataset = np.random.choice(train_dataset, args.batch_size)
         train_loss, train_pixel_acc = perform_train(model, optimizer, batch_dataset)
@@ -122,7 +122,7 @@ def train_model(args):
             os.makedirs(SAVE_DIR)
             save_learning_params(model, args)
 
-        if (iter_count == 10) or (iter_count % 50 == 0) or (iter_count == args.iteration):
+        if (iter_count == 10) or (iter_count % 100 == 0) or (iter_count == args.iteration):
             cv_loss, cv_pixel_acc = perform_cv(model, optimizer, cv_dataset)
             print('iter:%d trian loss:%f acc:%f cv loss:%f acc:%f' %
                   (iter_count, train_loss, train_pixel_acc, cv_loss, cv_pixel_acc))
@@ -139,7 +139,7 @@ def train_model(args):
             with open(os.path.join(SAVE_DIR, 'train_log.csv'), 'w') as fp:
                 df_logs.to_csv(fp, encoding='cp932', index=False)
 
-        if iter_count % 500 == 0:
+        if (iter_count >= 1000) and (iter_count % 500 == 0):
             chainer.serializers.save_npz(
                 os.path.join(SAVE_DIR, 'iter{}.model'.format(str(iter_count).zfill(5))), model)
             chainer.serializers.save_npz(
@@ -152,7 +152,7 @@ def train_model(args):
 
 
 def parse_arguments():
-    description = 'YOLO Detection Trainer'
+    description = 'FCN Trainer'
     parser = argparse.ArgumentParser(description=description)
     parser.add_argument('--model-file', type=str, dest='model_file', default='')
     parser.add_argument('--optimizer-file', type=str, dest='optimizer_file', default='')

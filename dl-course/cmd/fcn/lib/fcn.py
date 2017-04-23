@@ -117,41 +117,43 @@ class Fcn(chainer.Chain):
 
     def forward(self, x):
         # pool1
-        h = F.relu(self.conv1(x))
-        h = F.relu(self.conv2(h))
+        h = F.leaky_relu(self.bias1(self.bn1(self.conv1(x), test=not self.train)), slope=0.2)
+        h = F.leaky_relu(self.bias2(self.bn2(self.conv2(h), test=not self.train)), slope=0.2)
         h = F.max_pooling_2d(h, ksize=2, stride=2, pad=0)
 
         # pool2
-        h = F.relu(self.conv3(h))
-        h = F.relu(self.conv4(h))
+        h = F.leaky_relu(self.bias3(self.bn3(self.conv3(h), test=not self.train)), slope=0.2)
+        h = F.leaky_relu(self.bias4(self.bn4(self.conv4(h), test=not self.train)), slope=0.2)
         h = F.max_pooling_2d(h, ksize=2, stride=2, pad=0)
 
         # pool3
-        h = F.relu(self.conv5(h))
-        h = F.relu(self.conv6(h))
-        h = F.relu(self.conv7(h))
+        h = F.leaky_relu(self.bias5(self.bn5(self.conv5(h), test=not self.train)), slope=0.2)
+        h = F.leaky_relu(self.bias6(self.bn6(self.conv6(h), test=not self.train)), slope=0.2)
+        h = F.leaky_relu(self.bias7(self.bn7(self.conv7(h), test=not self.train)), slope=0.2)
         h = F.max_pooling_2d(h, ksize=2, stride=2, pad=0)
-        p3 = self.score_pool3(h) # (batch_size, N_CLASSES, 28, 28)
+        p3 = F.sigmoid(self.score_pool3(h)) # (batch_size, N_CLASSES, 28, 28)
 
         # pool4
-        h = F.relu(self.conv8(h))
-        h = F.relu(self.conv9(h))
-        h = F.relu(self.conv10(h))
+        h = F.leaky_relu(self.bias8(self.bn8(self.conv8(h), test=not self.train)), slope=0.2)
+        h = F.leaky_relu(self.bias9(self.bn9(self.conv9(h), test=not self.train)), slope=0.2)
+        h = F.leaky_relu(self.bias10(self.bn10(self.conv10(h), test=not self.train)), slope=0.2)
         h = F.max_pooling_2d(h, ksize=2, stride=2, pad=0)
-        p4 = self.score_pool4(h) # (batch_size, N_CLASSES, 14, 14)
+        p4 = F.sigmoid(self.score_pool4(h)) # (batch_size, N_CLASSES, 14, 14)
 
         # pool5
-        h = F.relu(self.conv11(h))
-        h = F.relu(self.conv12(h))
-        h = F.relu(self.conv13(h))
+        h = F.leaky_relu(self.bias11(self.bn11(self.conv11(h), test=not self.train)), slope=0.2)
+        h = F.leaky_relu(self.bias12(self.bn12(self.conv12(h), test=not self.train)), slope=0.2)
+        h = F.leaky_relu(self.bias13(self.bn13(self.conv13(h), test=not self.train)), slope=0.2)
         h = F.max_pooling_2d(h, ksize=2, stride=2, pad=0)
-        p5 = self.score_pool5(h) # (batch_size, N_CLASSES, 7, 7)
+        p5 = F.sigmoid(self.score_pool5(h)) # (batch_size, N_CLASSES, 7, 7)
 
         # FCN-32s
-        h32 = self.upsample_32x_pool1(p5)
+        h32 = None
+#        h32 = self.upsample_32x_pool1(p5)
         u5  = self.upsample_2x_pool1(p5)
         # FCN-16s
-        h16 = self.upsample_16x_pool2(u5 + p4)
+        h16 = None
+#        h16 = self.upsample_16x_pool2(u5 + p4)
         u4  = self.upsample_2x_pool2(u5 + p4)
         # FCN-8s
         h8  = self.upsample_8x_pool3(u4 + p3)
