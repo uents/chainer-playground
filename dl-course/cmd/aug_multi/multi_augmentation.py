@@ -90,7 +90,7 @@ def multi_augmentation(args):
             sys.stdout.flush()
             obj_image = extract_object_image(
                 item.color_image_path, item.label_image_path, item.bounding_box)
-            obj_image = rotate_image(obj_image, random.choice([0, 0, 90, -90, 180]))
+            obj_image = rotate_image(obj_image, random.choice([0, 0, 20, 75, 90, 90, -20, -75, -90, -90, 180, 180]))
             obj_image = scale_image(obj_image, random.uniform(0.9, 1.1))
             obj_images.append(obj_image)
 

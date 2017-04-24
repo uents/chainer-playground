@@ -38,13 +38,14 @@ START_TIME = dt.datetime.now().strftime('%Y-%m-%d_%H%M%S')
 SAVE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                         'snapshot_' + START_TIME)
 
-def load_catalog(catalog_file):
+def load_catalog(catalog_file, min_bbox=1):
     try:
         with open(os.path.join(catalog_file), 'r') as fp:
             catalog = json.load(fp)
     except IOError:
         return []
-    dataset = filter(lambda item: item['bounding_boxes'] != [], catalog['dataset'])
+    dataset = filter(lambda item: len(item['bounding_boxes']) >= min_bbox,
+                     catalog['dataset'])
     return dataset
 
 def load_dataset(image_paths, truth_boxes):
@@ -127,7 +128,7 @@ def train_model(args):
         print('load optimizer: %s' % (args.optimizer_file))
         chainer.serializers.load_npz(args.optimizer_file, optimizer)
 
-    train_dataset = load_catalog(args.train_catalog_file)
+    train_dataset = load_catalog(args.train_catalog_file, args.train_min_bbox)
     cv_dataset = load_catalog(args.cv_catalog_file)
     print('number of dataset: train:%d cv:%d' % (len(train_dataset), len(cv_dataset)))
 
@@ -181,6 +182,7 @@ def parse_arguments():
     parser.add_argument('--optimizer-file', type=str, dest='optimizer_file', default='')
     parser.add_argument('--train-catalog-file', type=str, dest='train_catalog_file', default='')
     parser.add_argument('--cv-catalog-file', type=str, dest='cv_catalog_file', default='')
+    parser.add_argument('--train-min-bbox', type=int, dest='train_min_bbox', default=1)
     parser.add_argument('--gpu', '-g', type=int, default=-1)
     parser.add_argument('--batchsize', '-b', type=int, dest='batch_size', default=20)
     parser.add_argument('--iteration', '-i', type=int, dest='iteration', default=1)
@@ -195,7 +197,8 @@ def save_learning_params(model, args):
         },
         'catalog_file': {
             'train': args.train_catalog_file,
-            'cv': args.cv_catalog_file
+            'cv': args.cv_catalog_file,
+            'min_bounding_boxes': args.train_min_bbox
         },
         'grid_cells': model.n_grid,
         'anchor_boxes': str(model.anchor_boxes.tolist()),
