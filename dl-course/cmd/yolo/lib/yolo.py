@@ -15,29 +15,28 @@ sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '
 from config import *
 from bounding_box import *
 
-xp = np
 
 '''
 YOLO(YOLO Tiny)については、Darknetの以下のリンク先を参考に実装。Tiny YOLOとは異なるので注意
 https://github.com/pjreddie/darknet/blob/8f1b4e0962857d402f9d017fcbf387ef0eceb7c4/cfg/yolo-tiny.cfg
 '''
 
+N_CNN_LAYER = 6
+
 class YoloClassifier(chainer.Chain):
     def __init__(self, gpu=-1):
         super(YoloClassifier, self).__init__(
-#            conv1  = L.Convolution2D(3,      16, ksize=3, stride=1, pad=1),
-            conv1  = L.Convolution2D(None,   32, ksize=3, stride=1, pad=1),
+            conv1  = L.Convolution2D(3,      32, ksize=3, stride=1, pad=1),
             conv2  = L.Convolution2D(None,   64, ksize=3, stride=1, pad=1),
             conv3  = L.Convolution2D(None,  128, ksize=3, stride=1, pad=1),
             conv4  = L.Convolution2D(None,  256, ksize=3, stride=1, pad=1),
             conv5  = L.Convolution2D(None,  512, ksize=3, stride=1, pad=1),
             conv6  = L.Convolution2D(None, 1024, ksize=3, stride=1, pad=1),
-            # additonal layers for pretraining
+            # additonal layer for pre-training
             conv7  = L.Convolution2D(None, N_CLASSES, ksize=1, stride=1, pad=0),
         )
         self.gpu = -1
         if gpu >= 0:
-            xp = chainer.cuda.cupy
             self.gpu = gpu
             self.to_gpu()
         self.train = False
@@ -47,22 +46,22 @@ class YoloClassifier(chainer.Chain):
 
         # convolution layers
         h = F.leaky_relu(self.conv1(x), slope=0.1)
-        h = F.max_pooling_2d(h, ksize=2, stride=2, pad=0) # 112
+        h = F.max_pooling_2d(h, ksize=2, stride=2, pad=0)
         h = F.leaky_relu(self.conv2(h), slope=0.1)
-        h = F.max_pooling_2d(h, ksize=2, stride=2, pad=0) # 56
+        h = F.max_pooling_2d(h, ksize=2, stride=2, pad=0)
         h = F.leaky_relu(self.conv3(h), slope=0.1)
-        h = F.max_pooling_2d(h, ksize=2, stride=2, pad=0) # 28
+        h = F.max_pooling_2d(h, ksize=2, stride=2, pad=0)
         h = F.leaky_relu(self.conv4(h), slope=0.1)
-        h = F.max_pooling_2d(h, ksize=2, stride=2, pad=0) # 14
+        h = F.max_pooling_2d(h, ksize=2, stride=2, pad=0)
         h = F.leaky_relu(self.conv5(h), slope=0.1)
-        h = F.max_pooling_2d(h, ksize=2, stride=2, pad=0) # 7
+        h = F.max_pooling_2d(h, ksize=2, stride=2, pad=0)
         h = F.leaky_relu(self.conv6(h), slope=0.1)
 
-        # additional layers for pretraining
+        # additional layer for pre-training
         h = self.conv7(h)
         h = F.average_pooling_2d(h, h.data.shape[-1], stride=1, pad=0)
 
-        # reshape result tensor
+        # reshape output tensor
         h = F.reshape(h, (batch_size, -1))
         return h
 
@@ -76,9 +75,10 @@ class YoloClassifier(chainer.Chain):
             return F.softmax(h)
 
 class YoloDetector(chainer.Chain):
-    def __init__(self, gpu=-1):
+    def __init__(self, gpu=-1, n_grid=N_GRID):
+        self.n_grid = n_grid
+        
         super(YoloDetector, self).__init__(
-#            conv1  = L.Convolution2D(3,      16, ksize=3, stride=1, pad=1),
             conv1  = L.Convolution2D(None,   32, ksize=3, stride=1, pad=1),
             conv2  = L.Convolution2D(None,   64, ksize=3, stride=1, pad=1),
             conv3  = L.Convolution2D(None,  128, ksize=3, stride=1, pad=1),
@@ -87,92 +87,102 @@ class YoloDetector(chainer.Chain):
             conv6  = L.Convolution2D(None, 1024, ksize=3, stride=1, pad=1),
             conv7  = L.Convolution2D(None, 1024, ksize=3, stride=1, pad=1),
             conv8  = L.Convolution2D(None, 1024, ksize=3, stride=1, pad=1),
-            fc9    = L.Linear(50176, 4096), # (1024,7,7)=50176
-            fc10   = L.Linear(4096, ((N_BOXES*5)+N_CLASSES) * (N_GRID**2))
+            fc9    = L.Linear(50176, 4096), # 50176=1024x7x7
+            fc10   = L.Linear(4096, (5+N_CLASSES) * (self.n_grid**2))
         )
         self.gpu = -1
         if gpu >= 0:
-            xp = chainer.cuda.cupy
             self.gpu = gpu
             self.to_gpu()
         self.train = False
+        self.iter_count = 1
 
     def forward(self, x):
         batch_size = x.data.shape[0]
 
         # convolution layers
         h = F.leaky_relu(self.conv1(x), slope=0.1)
-        h = F.max_pooling_2d(h, ksize=2, stride=2, pad=0) # 112
+        h = F.max_pooling_2d(h, ksize=2, stride=2, pad=0)
         h = F.leaky_relu(self.conv2(h), slope=0.1)
-        h = F.max_pooling_2d(h, ksize=2, stride=2, pad=0) # 56
+        h = F.max_pooling_2d(h, ksize=2, stride=2, pad=0)
         h = F.leaky_relu(self.conv3(h), slope=0.1)
-        h = F.max_pooling_2d(h, ksize=2, stride=2, pad=0) # 28
+        h = F.max_pooling_2d(h, ksize=2, stride=2, pad=0)
         h = F.leaky_relu(self.conv4(h), slope=0.1)
-        h = F.max_pooling_2d(h, ksize=2, stride=2, pad=0) # 14
+        h = F.max_pooling_2d(h, ksize=2, stride=2, pad=0)
         h = F.leaky_relu(self.conv5(h), slope=0.1)
-        h = F.max_pooling_2d(h, ksize=2, stride=2, pad=0) # 7
+        h = F.max_pooling_2d(h, ksize=2, stride=2, pad=0)
         h = F.leaky_relu(self.conv6(h), slope=0.1)
         h = F.leaky_relu(self.conv7(h), slope=0.1)
         h = F.leaky_relu(self.conv8(h), slope=0.1)
 
-        # fully connection layers
+        # full connection layers
         h = F.leaky_relu(self.fc9(h), slope=0.1)
         h = F.dropout(h, train=self.train, ratio=DROPOUT_RATIO)
         h = F.leaky_relu(self.fc10(h), slope=0.1)
 
-        # normalize and reshape predicted tensors
-#        h = F.sigmoid(h)
-        h = F.reshape(h, (batch_size, (5*N_BOXES)+N_CLASSES, N_GRID, N_GRID))
+        # reshape output tensor
+        h = F.reshape(h, (batch_size, 5+N_CLASSES, self.n_grid, self.n_grid))
         return h
 
-    def __call__(self, x, t):
-        batch_size = t.data.shape[0]
+    def __call__(self, x, ground_truths):
+        batch_size = x.data.shape[0]
 
-        # 推論を実行
+        # 推論を実行し結果を抽出
         h = self.forward(x)
         px, py, pw, ph, pconf, pprob \
             = F.split_axis(h, indices_or_sections=(1,2,3,4,5), axis=1)
 
-        # 教師データを抽出
-        tx, ty, tw, th, tconf, tprob \
-            = np.array_split(self.from_variable(t), indices_or_sections=(1,2,3,4,5), axis=1)
+        # 教師データを初期化
+        tx = np.tile(0.5, px.shape).astype(np.float32) # 基本は0.5 (グリッド中心)
+        ty = np.tile(0.5, py.shape).astype(np.float32) # 基本は0.5 (グリッド中心)
+        tw = np.zeros(pw.shape).astype(np.float32)
+        th = np.zeros(ph.shape).astype(np.float32)
+        tconf = np.zeros(pconf.shape).astype(np.float32)
+        tprob = pprob.data.copy() # 真のグリッド以外は損失誤差が発生しないよう推定値をコピー
 
-        # オブジェクトが存在しないグリッドは、グリッド中心とする
-        tx[tconf != 1.] = 0.5
-        ty[tconf != 1.] = 0.5
-
-        # オブジェクトが存在しないグリッドは、学習させない(誤差を相殺する)
-        class_map = (tprob == 1.0)
-        tprob = self.from_variable(pprob)
-        tprob[class_map] = 1.0
-
-        # 学習係数を、オブジェクトが存在するグリッドか否かで調整
+        # scaling factorを初期化
         box_scale_factor = np.tile(SCALE_FACTORS['nocoord'], tconf.shape).astype(np.float32)
-        box_scale_factor[tconf == 1.0] = SCALE_FACTORS['coord']
-        conf_scale_factor = np.tile(SCALE_FACTORS['noobj'], tconf.shape).astype(np.float32)
-        conf_scale_factor[tconf == 1.0] = SCALE_FACTORS['obj']
-        prob_scale_factor = np.tile(0.0, tconf.shape).astype(np.float32)
-        prob_scale_factor[tconf == 1.0] = SCALE_FACTORS['prob']
+        conf_scale_factor = np.tile(SCALE_FACTORS['noconf'], tconf.shape).astype(np.float32)
 
+        # objectに最も近い教師データをground truthに近づける
+        if self.iter_count >= 30:
+            for batch in six.moves.range(0, batch_size):
+                for truth_box in ground_truths[batch]:
+                    grid_x = int(math.modf(truth_box.center.x)[1])
+                    grid_y = int(math.modf(truth_box.center.y)[1])
+                    tx[batch, :, :, grid_y, grid_x] = math.modf(truth_box.center.x)[0]
+                    ty[batch, :, :, grid_y, grid_x] = math.modf(truth_box.center.y)[0]
+                    tw[batch, :, :, grid_y, grid_x] = truth_box.width / self.n_grid
+                    th[batch, :, :, grid_y, grid_x] = truth_box.height / self.n_grid
+                    box_scale_factor[batch, :, :, grid_y, grid_x] = SCALE_FACTORS['coord']
+
+                    # TODO: IOU^{truth}_{pred}とすべき??
+                    tconf[batch, :, :, grid_y, grid_x] = 1.
+                    conf_scale_factor[batch, :, :, grid_y, grid_x] = SCALE_FACTORS['conf']
+
+                    tprob[batch, :, :, grid_y, grid_x] = 0.
+                    tprob[batch, :, int(truth_box.clazz), grid_y, grid_x] = 1.
+
+        
         # 損失誤差を算出
-        tx, ty, tw, th = self.to_variable(tx), self.to_variable(ty), self.to_variable(tw), self.to_variable(th)
+        tx, ty, tw, th = self.to_variable(tx), self.to_variable(ty), \
+                         self.to_variable(tw), self.to_variable(th)
         tconf, tprob = self.to_variable(tconf), self.to_variable(tprob)
         box_scale_factor = self.to_variable(box_scale_factor)
         conf_scale_factor = self.to_variable(conf_scale_factor)
-        prob_scale_factor = self.to_variable(prob_scale_factor)
 
-        x_loss = F.sum(box_scale_factor * ((tx - px) ** 2))
-        y_loss = F.sum(box_scale_factor * ((ty - py) ** 2))
-        w_loss = F.sum(box_scale_factor * ((tw - pw) ** 2))
-        h_loss = F.sum(box_scale_factor * ((th - ph) ** 2))
-        conf_loss = F.sum(conf_scale_factor * ((tconf - pconf) ** 2))
-        prob_loss = F.sum(prob_scale_factor * F.reshape(F.sum(((tprob - pprob) ** 2), axis=1), prob_scale_factor.shape))
+        loss_x = F.sum(box_scale_factor * ((px - tx) ** 2))
+        loss_y = F.sum(box_scale_factor * ((py - ty) ** 2))
+        loss_w = F.sum(box_scale_factor * ((pw - tw) ** 2))
+        loss_h = F.sum(box_scale_factor * ((ph - th) ** 2))
+        loss_conf = F.sum(conf_scale_factor * ((pconf - tconf) ** 2))
+        loss_prob = F.sum((pprob - tprob) ** 2)
 
-        self.loss = x_loss + y_loss + w_loss + h_loss + conf_loss + prob_loss
-        self.loss_log = ("loss %3.4f x:%03.4f y:%03.4f w:%03.4f h:%03.4f conf:%03.4f prob:%03.4f" %
-                         (self.loss, x_loss.data / batch_size, y_loss.data / batch_size,
-                          w_loss.data / batch_size, h_loss.data / batch_size,
-                          conf_loss.data / batch_size, prob_loss.data / batch_size))
+        self.loss = loss_x + loss_y + loss_w + loss_h + loss_conf + loss_prob
+        self.loss_log = ("loss %03.4f x:%03.4f y:%03.4f w:%03.4f h:%03.4f conf:%03.4f prob:%03.4f" %
+                         (self.loss.data, loss_x.data / batch_size, loss_y.data / batch_size,
+                          loss_w.data / batch_size, loss_h.data / batch_size,
+                          loss_conf.data / batch_size, loss_prob.data / batch_size))
 
         self.h = self.from_variable(h)
         if self.train:

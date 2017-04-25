@@ -18,7 +18,10 @@ import chainer.links as L
 
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'lib'))
 from config import *
-from yolo_v2 import *
+if NETWORK == 'v1':
+    from yolo import *
+else:
+    from yolo_v2 import *
 
 
 def copy_conv_layer(src, dst):
@@ -72,8 +75,9 @@ if __name__ == '__main__':
     xs = chainer.Variable(dummy_image.astype(np.float32))
     detector_model.forward(xs)
     copy_conv_layer(classifier_model, detector_model)
-    copy_bn_layer(classifier_model, detector_model)
-    copy_bias_layer(classifier_model, detector_model)
+    if NETWORK != 'v1':
+        copy_bn_layer(classifier_model, detector_model)
+        copy_bias_layer(classifier_model, detector_model)
 
     print('save model')
     chainer.serializers.save_npz(args.output_model_file, detector_model)

@@ -8,21 +8,26 @@ import os
 import numpy as np
 
 # network configurations
+NETWORK = 'v1'  # 'v2': YOLOv2, 'v1': YOLO
+
 N_CLASSES = 26  # 0..25
                 # F.softmax_cross_entropy()で扱うラベルが
                 # 0始まりの必要があるため、便宜的に0を追加
+
+if NETWORK == 'v1':
+    N_GRID = 7
+    ANCHOR_BOXES = np.array([[-1., -1.]])
+else:
+    N_GRID = 9
+    ANCHOR_BOXES = np.array([[0.32688071, 0.74313729],
+                             [0.64044543, 0.79116386],
+                             [0.22818257, 0.40743414],
+                             [0.79330671, 0.30941929],
+                             [0.49256300, 0.32012029]])
+    ANCHOR_BOXES *= N_GRID
+
 GRID_SIZE = 32
-
-N_GRID = 9
 INPUT_SIZE = GRID_SIZE * N_GRID
-
-ANCHOR_BOXES = np.array([[0.32688071, 0.74313729],
-                         [0.64044543, 0.79116386],
-                         [0.22818257, 0.40743414],
-                         [0.79330671, 0.30941929],
-                         [0.49256300, 0.32012029]])
-ANCHOR_BOXES *= N_GRID
-N_BOXES = int(len(ANCHOR_BOXES))
 
 
 # training configurations
@@ -44,6 +49,7 @@ SCALE_FACTORS = {
     'noconf': 0.1,
 }
 CONFIDENCE_KEEP_THRESH = 0.6
+
 
 # inference configurations
 CLASS_PROBABILITY_THRESH = 0.3

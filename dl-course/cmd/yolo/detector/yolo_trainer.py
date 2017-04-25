@@ -25,7 +25,10 @@ from image_process import *
 
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'lib'))
 from config import *
-from yolo_v2 import *
+if NETWORK == 'v1':
+    from yolo import *
+else:
+    from yolo_v2 import *
 from bounding_box import *
 from image import *
 from metrics import *
@@ -201,18 +204,21 @@ def save_learning_params(model, args):
             'min_bounding_boxes': args.train_min_bbox
         },
         'grid_cells': model.n_grid,
-        'anchor_boxes': str(model.anchor_boxes.tolist()),
         'max_iterations': args.iteration,
         'batch_size': args.batch_size,
         'momentum': MOMENTUM,
         'weight_decay': WEIGHT_DECAY,
         'lr_schedules': LR_SCHEDULES,
-#        'dropout_ratio': DROPOUT_RATIO,
         'scale_factors': SCALE_FACTORS,
-        'confidence_keep_thresh': CONFIDENCE_KEEP_THRESH,
         'class_prob_thresh': CLASS_PROBABILITY_THRESH,
         'nms_iou_thresh': NMS_IOU_THRESH
     }
+    if NETWORK == 'v1':
+        params['dropout_ratio'] = DROPOUT_RATIO,
+    else:
+        params['anchor_boxes'] = str(model.anchor_boxes.tolist()),
+        params['confidence_keep_thresh'] = CONFIDENCE_KEEP_THRESH,
+    
     with open(os.path.join(SAVE_DIR, 'params.json'), 'w') as fp:
         json.dump(params, fp, sort_keys=True, ensure_ascii=False, indent=2)
 

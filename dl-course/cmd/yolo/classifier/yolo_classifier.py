@@ -20,7 +20,10 @@ import chainer.links as L
 
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'lib'))
 from config import *
-from yolo_v2 import *
+if NETWORK == 'v1':
+    from yolo import *
+else:
+    from yolo_v2 import *
 from image import *
 
 xp = np

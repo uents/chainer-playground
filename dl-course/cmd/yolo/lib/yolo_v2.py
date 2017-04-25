@@ -307,8 +307,6 @@ class YoloDetector(chainer.Chain):
         px, py, pw, ph, pconf, pprob = F.split_axis(h, indices_or_sections=(1,2,3,4,5), axis=2)
         px = F.sigmoid(px)
         py = F.sigmoid(py)
-#        pw = pw - F.broadcast_to(F.expand_dims(F.logsumexp(pw, axis=1), 1), pw.shape)
-#        ph = ph - F.broadcast_to(F.expand_dims(F.logsumexp(ph, axis=1), 1), ph.shape)
         pconf = F.sigmoid(pconf)
         pprob = F.sigmoid(pprob)
 
@@ -327,7 +325,7 @@ class YoloDetector(chainer.Chain):
         if self.iter_count >= 30:
             # 一定以上のIOUを持つanchorに対する教師データのconfidence scoreは下げない
             best_ious = []
-            for batch in range(0, batch_size):
+            for batch in six.moves.range(0, batch_size):
                 ious = []
                 pboxes = self.all_pred_boxes(px.data[batch], py.data[batch], pw.data[batch], ph.data[batch])
                 for truth_box in ground_truths[batch]:
@@ -350,7 +348,7 @@ class YoloDetector(chainer.Chain):
 
             # objectに最も近いanchor boxに対する教師データをground truthに近づける
             pred_ious = [] # ログ出力用
-            for batch in range(0, batch_size):
+            for batch in six.moves.range(0, batch_size):
                 for truth_box in ground_truths[batch]:
                     anchor_ious = np.asarray([Box.iou(Box(0., 0., anchor_box[0], anchor_box[1]),
                                                       Box(0., 0., truth_box.width, truth_box.height))

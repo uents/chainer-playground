@@ -171,8 +171,13 @@ def inference_to_bounding_boxes(tensors, anchor_boxes=ANCHOR_BOXES, input_size=I
 
         bboxes = []
         for i in six.moves.range(0, grid_map.sum()):
-            bw = np.exp(pw[grid_map][i]) * anchor_box[0]
-            bh = np.exp(ph[grid_map][i]) * anchor_box[1]
+            if anchor_box[0] == -1. and anchor_box[1] == -1.:
+                bw = pw[grid_map][i] * N_GRID
+                bh = ph[grid_map][i] * N_GRID
+            else:
+                bw = np.exp(pw[grid_map][i]) * anchor_box[0]
+                bh = np.exp(ph[grid_map][i]) * anchor_box[1]
+
             bx = max(grid_cells[i].x + px[grid_map][i] - bw/2., 0.)
             by = max(grid_cells[i].y + py[grid_map][i] - bh/2., 0.)
             bw = min(bw, N_GRID - bx)
