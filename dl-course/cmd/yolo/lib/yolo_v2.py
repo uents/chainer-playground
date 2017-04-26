@@ -304,7 +304,8 @@ class YoloDetector(chainer.Chain):
 
         # 推論を実行し結果を抽出
         h = self.forward(h)
-        px, py, pw, ph, pconf, pprob = F.split_axis(h, indices_or_sections=(1,2,3,4,5), axis=2)
+        px, py, pw, ph, pconf, pprob \
+            = F.split_axis(h, indices_or_sections=(1,2,3,4,5), axis=2)
         px = F.sigmoid(px)
         py = F.sigmoid(py)
         pconf = F.sigmoid(pconf)

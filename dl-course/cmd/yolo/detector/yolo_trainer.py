@@ -194,6 +194,7 @@ def parse_arguments():
 
 def save_learning_params(model, args):
     params = {
+        'network': NETWORK,
         'elapsed_time': {
             'start': START_TIME,
             'end': dt.datetime.now().strftime('%Y-%m-%d_%H%M%S')
@@ -204,6 +205,7 @@ def save_learning_params(model, args):
             'min_bounding_boxes': args.train_min_bbox
         },
         'grid_cells': model.n_grid,
+        'anchor_boxes': str(model.anchor_boxes.tolist()),
         'max_iterations': args.iteration,
         'batch_size': args.batch_size,
         'momentum': MOMENTUM,
@@ -216,7 +218,6 @@ def save_learning_params(model, args):
     if NETWORK == 'v1':
         params['dropout_ratio'] = DROPOUT_RATIO,
     else:
-        params['anchor_boxes'] = str(model.anchor_boxes.tolist()),
         params['confidence_keep_thresh'] = CONFIDENCE_KEEP_THRESH,
     
     with open(os.path.join(SAVE_DIR, 'params.json'), 'w') as fp:

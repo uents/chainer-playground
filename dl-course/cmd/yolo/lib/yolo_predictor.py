@@ -40,11 +40,8 @@ class YoloPredictor(chainer.Chain):
             self.anchor_boxes = ANCHOR_BOXES
 
         # 学習済みモデルをロード
-        if NETWORK == 'v1':
-            self.model = YoloDetector(gpu=self.gpu, n_grid=self.n_grid,
-                                      anchor_boxes=self.anchor_boxes)
-        else:
-            self.model = YoloDetector(gpu=self.gpu, n_grid=self.n_grid)
+        self.model = YoloDetector(gpu=self.gpu, n_grid=self.n_grid,
+                                  anchor_boxes=self.anchor_boxes)
         if len(model_file) > 0:
             print('load model: %s' % model_file)
             chainer.serializers.load_npz(model_file, self.model)

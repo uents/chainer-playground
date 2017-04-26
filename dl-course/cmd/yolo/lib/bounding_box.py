@@ -152,12 +152,19 @@ def inference_to_bounding_boxes(tensors, anchor_boxes=ANCHOR_BOXES, input_size=I
     def bboxes_of_anchor(tensor, anchor_box):
         px, py, pw, ph, pconf, pprob \
             = np.array_split(tensor, indices_or_sections=(1,2,3,4,5), axis=0)
-        px = F.sigmoid(px.reshape(px.shape[1:])).data
-        py = F.sigmoid(py.reshape(py.shape[1:])).data
-        pw = pw.reshape(pw.shape[1:])
-        ph = ph.reshape(ph.shape[1:])
-        pconf = F.sigmoid(pconf.reshape(pconf.shape[1:])).data
-        pprob = F.sigmoid(pprob).data
+        if anchor_box[0] == -1. and anchor_box[1] == -1.:
+            px = px.reshape(px.shape[1:])
+            py = py.reshape(py.shape[1:])
+            pw = pw.reshape(pw.shape[1:])
+            ph = ph.reshape(ph.shape[1:])
+            pconf = pconf.reshape(pconf.shape[1:])
+        else:
+            px = F.sigmoid(px.reshape(px.shape[1:])).data
+            py = F.sigmoid(py.reshape(py.shape[1:])).data
+            pw = pw.reshape(pw.shape[1:])
+            ph = ph.reshape(ph.shape[1:])
+            pconf = F.sigmoid(pconf.reshape(pconf.shape[1:])).data
+            pprob = F.sigmoid(pprob).data
         
         # グリッド毎のクラス確率を算出 (N_CLASSES, N_GRID, N_GRID)
         objectness_map = pprob * pconf

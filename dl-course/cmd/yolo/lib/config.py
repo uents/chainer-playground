@@ -8,7 +8,7 @@ import os
 import numpy as np
 
 # network configurations
-NETWORK = 'v1'  # 'v2': YOLOv2, 'v1': YOLO
+NETWORK = 'v2'  # 'v2': YOLOv2, 'v1': YOLO
 
 N_CLASSES = 26  # 0..25
                 # F.softmax_cross_entropy()で扱うラベルが
@@ -42,14 +42,21 @@ LR_SCHEDULES = {
     '7001': 1e-6,
 }
 
-SCALE_FACTORS = {
-    'coord': 1.0,
-    'nocoord': 0.1,
-    'conf': 3.0,
-    'noconf': 0.1,
-}
-CONFIDENCE_KEEP_THRESH = 0.6
-
+if NETWORK == 'v1':
+    SCALE_FACTORS = {
+        'coord': 5.0,
+        'nocoord': 0.1,
+        'conf': 1.0,
+        'noconf': 0.1,
+    }
+else:
+    SCALE_FACTORS = {
+        'coord': 1.0,
+        'nocoord': 0.1,
+        'conf': 3.0,
+        'noconf': 0.1,
+    }
+    CONFIDENCE_KEEP_THRESH = 0.6
 
 # inference configurations
 CLASS_PROBABILITY_THRESH = 0.3

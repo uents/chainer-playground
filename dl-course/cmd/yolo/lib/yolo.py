@@ -75,8 +75,9 @@ class YoloClassifier(chainer.Chain):
             return F.softmax(h)
 
 class YoloDetector(chainer.Chain):
-    def __init__(self, gpu=-1, n_grid=N_GRID):
+    def __init__(self, gpu=-1, n_grid=N_GRID, anchor_boxes=ANCHOR_BOXES):
         self.n_grid = n_grid
+        self.anchor_boxes = anchor_boxes # YOLOv2との互換性のため便宜的に持つ
         
         super(YoloDetector, self).__init__(
             conv1  = L.Convolution2D(None,   32, ksize=3, stride=1, pad=1),
@@ -121,7 +122,8 @@ class YoloDetector(chainer.Chain):
         h = F.leaky_relu(self.fc10(h), slope=0.1)
 
         # reshape output tensor
-        h = F.reshape(h, (batch_size, 5+N_CLASSES, self.n_grid, self.n_grid))
+        h = F.reshape(h, (batch_size, 1, 5+N_CLASSES, self.n_grid, self.n_grid))
+        h = F.sigmoid(h)
         return h
 
     def __call__(self, x, ground_truths):
@@ -130,7 +132,7 @@ class YoloDetector(chainer.Chain):
         # 推論を実行し結果を抽出
         h = self.forward(x)
         px, py, pw, ph, pconf, pprob \
-            = F.split_axis(h, indices_or_sections=(1,2,3,4,5), axis=1)
+            = F.split_axis(h, indices_or_sections=(1,2,3,4,5), axis=2)
 
         # 教師データを初期化
         tx = np.tile(0.5, px.shape).astype(np.float32) # 基本は0.5 (グリッド中心)
